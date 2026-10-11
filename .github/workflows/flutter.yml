@@ -1,25 +1,58 @@
-name: Flutter CI
+name: Build Flait Android APK and Web
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  analyze-and-test:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+
+      - name: Generate Android and Web platform folders
+        run: flutter create . --project-name flait_expense_manage --platforms=android,web
+
       - name: Install dependencies
         run: flutter pub get
+
       - name: Analyze
         run: flutter analyze
-      - name: Test
+
+      - name: Run tests
         run: flutter test
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Build web app
+        run: flutter build web --release --base-href /
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: flait-android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: flait-web-build
+          path: build/web/
+          if-no-files-found: error
+          retention-days: 30
