@@ -36,9 +36,9 @@ class LedgerScreen extends StatelessWidget {
       ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-        FilledButton(onPressed: () {
+        FilledButton(onPressed: () async {
           try {
-            state.recordContribution(double.parse(amount.text.trim()), description.text);
+            await state.recordContribution(double.parse(amount.text.trim()), description.text);
             Navigator.pop(dialogContext);
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Contribution recorded.')));
           } catch (error) {
