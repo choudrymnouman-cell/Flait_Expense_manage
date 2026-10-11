@@ -88,10 +88,12 @@ create policy "users create their own flats" on public.flats for insert to authe
 with check (created_by = (select auth.uid()));
 create policy "flat members can read membership" on public.flat_members for select to authenticated
 using (user_id = (select auth.uid()) or private.is_flat_member(flat_id));
-create policy "flat creator can add themselves as admin" on public.flat_members for insert to authenticated
-with check (user_id = (select auth.uid()) and role = 'admin' and exists (select 1 from public.flats f where f.id = flat_id and f.created_by = (select auth.uid())));
-create policy "flat managers can add members" on public.flat_members for insert to authenticated
-with check (private.is_flat_manager(flat_id));
+create policy "authorized flat membership creation" on public.flat_members for insert to authenticated
+with check (
+  (user_id = (select auth.uid()) and role = 'admin'
+   and exists (select 1 from public.flats f where f.id = flat_id and f.created_by = (select auth.uid())))
+  or private.is_flat_manager(flat_id)
+);
 
 create policy "flat members read expenses" on public.expenses for select to authenticated
 using (private.is_flat_member(flat_id));
@@ -236,3 +238,6 @@ create index if not exists expense_votes_flat_id_idx on public.expense_votes(fla
 create index if not exists expense_votes_member_id_idx on public.expense_votes(member_id);
 create index if not exists expenses_requester_id_idx on public.expenses(requester_id);
 create index if not exists ledger_entries_actor_id_idx on public.ledger_entries(actor_id);
+
+create index if not exists flat_invites_created_by_idx on public.flat_invites(created_by);
+create index if not exists flat_invites_accepted_by_idx on public.flat_invites(accepted_by);
