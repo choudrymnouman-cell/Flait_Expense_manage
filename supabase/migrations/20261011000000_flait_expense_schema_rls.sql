@@ -186,7 +186,13 @@ create table public.flat_invites (
 create index flat_invites_flat_id_idx on public.flat_invites(flat_id);
 alter table public.flat_invites enable row level security;
 create policy "flat managers create invites" on public.flat_invites for insert to authenticated
-with check (private.is_flat_manager(flat_id) and created_by = (select auth.uid()) and accepted_by is null);
+with check (
+  private.is_flat_manager(flat_id)
+  and created_by = (select auth.uid())
+  and accepted_by is null
+  and expires_at > now()
+  and expires_at <= now() + interval '7 days'
+);
 create policy "flat managers view invites" on public.flat_invites for select to authenticated
 using (private.is_flat_manager(flat_id));
 
