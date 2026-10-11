@@ -131,7 +131,7 @@ class _AuthGateState extends State<AuthGate> {
         const SizedBox(height: 18),
         FilledButton(onPressed: busy ? null : submitAuth, child: Text(busy ? 'Please wait…' : signUp ? 'Create account' : 'Sign in')),
         TextButton(onPressed: busy ? null : () => setState(() { signUp = !signUp; error = null; notice = null; }), child: Text(signUp ? 'Already have an account? Sign in' : 'New here? Create account')),
-      ])),
+      ]))),
     ))),
   );
 
@@ -155,7 +155,7 @@ class _AuthGateState extends State<AuthGate> {
         const SizedBox(height: 18),
         FilledButton(onPressed: busy ? null : setupFlat, child: Text(busy ? 'Please wait…' : joinMode ? 'Join flat' : 'Create flat')),
         TextButton(onPressed: busy ? null : () => setState(() { joinMode = !joinMode; error = null; }), child: Text(joinMode ? 'Create a new flat instead' : 'Have an invitation code? Join a flat')),
-      ])),
+      ]))),
     ))),
   );
 }
