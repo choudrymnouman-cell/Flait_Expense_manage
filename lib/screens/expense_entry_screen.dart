@@ -75,6 +75,6 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
           SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: saving ? null : submit, icon: const Icon(Icons.send_outlined), label: Text(saving ? 'Submitting…' : 'Submit for approval'))),
         ]))),
       ),
-    )),
+    ))),
   ]);
 }
