@@ -138,7 +138,10 @@ class FlaitState extends ChangeNotifier {
     if (currentMember.role != MemberRole.treasurer && currentMember.role != MemberRole.admin) {
       throw StateError('Only the treasurer or flat admin can record payments.');
     }
-    final expense = expenses.where((e) => e.id == expenseId).firstOrNull;
+    ExpenseRequest? expense;
+    for (final item in expenses) {
+      if (item.id == expenseId) { expense = item; break; }
+    }
     if (expense == null) throw StateError('Expense request not found.');
     if (expense.status != ExpenseStatus.approved) throw StateError('Only approved requests can be paid.');
     await db.from('expenses').update({'status': 'paid'}).eq('id', expenseId).eq('flat_id', flatId);
