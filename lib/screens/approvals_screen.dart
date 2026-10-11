@@ -80,9 +80,9 @@ class ApprovalsScreen extends StatelessWidget {
     }
   }
 
-  void _pay(BuildContext context, String id) {
+  Future<void> _pay(BuildContext context, String id) async {
     try {
-      state.markPaid(id);
+      await state.markPaid(id);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment recorded and pool balance updated.')));
     } catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
