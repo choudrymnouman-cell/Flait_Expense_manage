@@ -40,13 +40,13 @@ class SettingsScreen extends StatelessWidget {
         const SizedBox(height: 8),
         const Text('As flat admin, assign the treasurer role to a trusted flatmate.'),
         const SizedBox(height: 8),
-        for (final member in state.members.where((m) => m.id != state.currentMemberId))
+        for (final member in state.members.where((m) => m.id != state.currentMemberId && m.role != MemberRole.admin))
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(member.name),
             subtitle: Text(member.id),
             trailing: DropdownButton<MemberRole>(
-              value: member.role == MemberRole.admin ? MemberRole.member : member.role,
+              value: member.role,
               items: const [
                 DropdownMenuItem(value: MemberRole.member, child: Text('Member')),
                 DropdownMenuItem(value: MemberRole.treasurer, child: Text('Treasurer')),
