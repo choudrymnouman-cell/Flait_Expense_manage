@@ -241,3 +241,15 @@ create index if not exists ledger_entries_actor_id_idx on public.ledger_entries(
 
 create index if not exists flat_invites_created_by_idx on public.flat_invites(created_by);
 create index if not exists flat_invites_accepted_by_idx on public.flat_invites(accepted_by);
+
+-- Only flat admins can change roles; clients may update only the role column.
+create or replace function private.is_flat_admin(p_flat_id uuid)
+returns boolean language sql stable security definer set search_path = ''
+as $$
+ select exists (select 1 from public.flat_members m where m.flat_id = p_flat_id and m.user_id = (select auth.uid()) and m.active and m.role = 'admin');
+$$;
+revoke all on function private.is_flat_admin(uuid) from public, anon;
+grant execute on function private.is_flat_admin(uuid) to authenticated;
+grant update (role) on public.flat_members to authenticated;
+create policy "flat admins manage member roles" on public.flat_members for update to authenticated
+using (private.is_flat_admin(flat_id)) with check (private.is_flat_admin(flat_id));
