@@ -151,6 +151,21 @@ class FlaitState extends ChangeNotifier {
     await load();
   }
 
+  Future<void> setMemberRole(String userId, MemberRole role) async {
+    if (currentMember.role != MemberRole.admin) {
+      throw StateError('Only the flat admin can change member roles.');
+    }
+    if (userId == currentMemberId) throw StateError('You cannot change your own role here.');
+    final roleName = switch (role) {
+      MemberRole.admin => 'admin',
+      MemberRole.treasurer => 'treasurer',
+      MemberRole.member => 'member',
+    };
+    await db.from('flat_members').update({'role': roleName})
+      .eq('flat_id', flatId).eq('user_id', userId);
+    await load();
+  }
+
   Future<String> createInvite() async {
     if (currentMember.role != MemberRole.admin && currentMember.role != MemberRole.treasurer) {
       throw StateError('Only the flat admin or treasurer can create invitations.');
