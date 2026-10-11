@@ -1,88 +1,45 @@
 # Flait — Shared Flat Expense Manager
 
-A Flutter app for Android and Web to manage shared flat expenses, treasurer pool money, reimbursement requests, roommate approvals, and a transparent ledger.
+Flutter app for Android and Web to manage shared-flat expense claims, flatmate approvals, treasurer pool money and a transparent ledger.
+
+## Connected services
+
+- **Flutter**: one responsive app for Android and Web.
+- **Supabase Auth**: email/password account creation and sign-in.
+- **Supabase PostgreSQL**: persistent flat, member, expense, vote and ledger records.
+- **Row Level Security (RLS)**: flat membership policies are enforced by PostgreSQL; the publishable key is the only key included in the client.
 
 ## Core accounting rules
 
 - An expense request is a claim, not a payment.
-- An approval creates an approved liability; it does not reduce the pool balance.
-- Only a recorded pool payment reduces the pool balance.
-- Contributions increase the pool balance.
-- Every money-changing event must have a unique ID, actor, timestamp, and audit entry.
-- Balances should be derived from ledger entries rather than independently edited totals.
+- A majority of eligible flatmates (excluding the requester) must approve or reject.
+- Approval does not change the pool balance.
+- A treasurer or flat admin can record contributions and pay approved expenses.
+- Paid expenses create a ledger entry and reduce the pool balance.
+- Pool balances are derived from ledger entries.
 
-## Planned features
+## Database setup
 
-- Flat setup, roommate membership, role-based permissions (treasurer, member, flat admin).
-- Pool contributions and withdrawals with reason and audit trail.
-- Expense and reimbursement requests with category, date, description, receipt attachment, and payer.
-- Configurable approval quorum, conflict-of-interest protection, approve/reject comments, and status history.
-- Treasurer payment recording and reimbursement status tracking.
-- Ledger, pool balance, individual balances, settlement suggestions, reports, CSV export, and notifications.
-- Input validation, duplicate-submit protection, tests, and responsive Android/Web layouts.
+The schema is in `supabase/migrations/20261011000000_flait_expense_schema_rls.sql`. It creates the tables, constraints, indexes, policies and database triggers used by the app.
 
-## Tech stack
+The migration has been applied to the configured Supabase project. If you create a fresh project, apply the migration in the Supabase SQL Editor or with the Supabase CLI before launching the app.
 
-- Flutter / Dart (single Android and Web codebase).
-- Initial local/demo repository scaffold uses an in-memory repository so the UI and accounting rules can be explored without credentials.
-- Production deployment should connect an authenticated backend (for example Supabase/PostgreSQL or a secured REST API). Do not put service-role keys or database passwords in the Flutter client.
+## Run locally
 
-## Prerequisites
-
-Install Flutter stable and enable web support. Verify installation:
-
-```bash
-flutter doctor
-flutter config --enable-web
-```
-
-## Run
-
-This repository contains the app source scaffold. From the repository root, create platform runner files if they are not present, then fetch packages and run:
+Install Flutter stable and enable Web support. Then run:
 
 ```bash
 flutter create . --platforms=android,web
 flutter pub get
-flutter run -d chrome
-# or select an Android emulator/device
-flutter run
-```
-
-## Tests
-
-```bash
+flutter analyze
 flutter test
+flutter run -d chrome
 ```
 
-## Project structure
+To run on Android, connect an emulator/device and use `flutter run`.
 
-```text
-lib/
-  main.dart
-  app.dart
-  models/       # flat, member, expense, ledger entry
-  services/     # repository and accounting calculations
-  state/        # app state / actions
-  screens/      # dashboard, expense entry, approvals, ledger, settings
-  widgets/      # shared UI
- test/
-  accounting_service_test.dart
-```
+## Current scope / next work
 
-## Approval policy
+The current version supports account signup/sign-in, first-flat creation, member list, expense submission, voting, contributions, recording approved payments, and the ledger. Flatmate invitations, receipt uploads, push notifications, CSV export, password reset UI, and full automated integration tests are not yet implemented.
 
-The default demo policy requires a majority of eligible flatmates, excluding the requester from voting on their own reimbursement. The policy is configurable in code; a production system should store policy on the server and enforce it server-side. A rejected request keeps its decision history. An approved request is still unpaid until the treasurer records the payment.
-
-## Production checklist
-
-- Add authentication and invitation flow.
-- Enforce flat-level row access on the backend (RLS or equivalent).
-- Upload receipts to private storage with signed access URLs.
-- Store immutable ledger entries and run balance changes in database transactions.
-- Add server-side idempotency keys and authorization checks.
-- Configure notifications and backups.
-- Run tests and review privacy/security before release.
-
-## Status
-
-Initial source scaffold. The demo repository does not yet include production authentication, cloud persistence, receipt storage, or push notifications; these require backend configuration and credentials supplied securely outside source control.
+Never put a Supabase secret/service-role key or database password in this Flutter repository.
