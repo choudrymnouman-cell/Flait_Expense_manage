@@ -34,6 +34,35 @@ class SettingsScreen extends StatelessWidget {
       const _InfoRow(label: 'Data storage', value: 'Supabase cloud database'),
       const _InfoRow(label: 'Authentication', value: 'Supabase Auth'),
     ])))),
+    if (state.currentMember.role == MemberRole.admin)
+      Padding(padding: const EdgeInsets.fromLTRB(22, 18, 22, 0), child: Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Flatmate roles', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+        const SizedBox(height: 8),
+        const Text('As flat admin, assign the treasurer role to a trusted flatmate.'),
+        const SizedBox(height: 8),
+        for (final member in state.members.where((m) => m.id != state.currentMemberId))
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(member.name),
+            subtitle: Text(member.id),
+            trailing: DropdownButton<MemberRole>(
+              value: member.role == MemberRole.admin ? MemberRole.member : member.role,
+              items: const [
+                DropdownMenuItem(value: MemberRole.member, child: Text('Member')),
+                DropdownMenuItem(value: MemberRole.treasurer, child: Text('Treasurer')),
+              ],
+              onChanged: (role) async {
+                if (role == null) return;
+                try {
+                  await state.setMemberRole(member.id, role);
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))));
+                }
+              },
+            ),
+          ),
+      ])))),
     Padding(padding: const EdgeInsets.fromLTRB(22, 18, 22, 0), child: Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Text('Invite a flatmate', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
       const SizedBox(height: 8),
