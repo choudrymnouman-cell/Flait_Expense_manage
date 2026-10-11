@@ -148,6 +148,17 @@ class FlaitState extends ChangeNotifier {
     await load();
   }
 
+  Future<String> createInvite() async {
+    if (currentMember.role != MemberRole.admin && currentMember.role != MemberRole.treasurer) {
+      throw StateError('Only the flat admin or treasurer can create invitations.');
+    }
+    final result = await db.from('flat_invites').insert({
+      'flat_id': flatId,
+      'created_by': currentMemberId,
+    }).select('invite_code').single();
+    return result['invite_code'] as String;
+  }
+
   MemberRole _role(String? role) => switch (role) {
     'admin' => MemberRole.admin,
     'treasurer' => MemberRole.treasurer,
