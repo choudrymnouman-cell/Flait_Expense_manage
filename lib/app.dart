@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'models/flat_models.dart';
 import 'screens/approvals_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/expense_entry_screen.dart';
@@ -32,7 +31,6 @@ class _FlaitAppState extends State<FlaitApp> {
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF3659C9)),
       scaffoldBackgroundColor: const Color(0xFFF6F7FB),
-      cardTheme: const CardThemeData(elevation: 0, color: Colors.white, margin: EdgeInsets.zero),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
