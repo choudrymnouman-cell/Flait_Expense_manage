@@ -40,6 +40,6 @@ To run on Android, connect an emulator/device and use `flutter run`.
 
 ## Current scope / next work
 
-The current version supports account signup/sign-in, first-flat creation, member list, expense submission, voting, contributions, recording approved payments, and the ledger. Flatmate invitations, receipt uploads, push notifications, CSV export, password reset UI, and full automated integration tests are not yet implemented.
+The current version supports account signup/sign-in, first-flat creation, single-use flatmate invitation codes, expense submission, voting, contributions, recording approved payments, and the ledger. Flatmate invitations, receipt uploads, push notifications, CSV export, password reset UI, and full automated integration tests are not yet implemented.
 
 Never put a Supabase secret/service-role key or database password in this Flutter repository.
