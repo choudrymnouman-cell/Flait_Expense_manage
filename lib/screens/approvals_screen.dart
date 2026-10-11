@@ -10,12 +10,15 @@ class ApprovalsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pending = state.expenses.where((e) => e.status == ExpenseStatus.pending).toList();
+    final approved = state.expenses.where((e) => e.status == ExpenseStatus.approved).toList();
+    final canPay = state.currentMember.role == MemberRole.treasurer || state.currentMember.role == MemberRole.admin;
     return ListView(padding: const EdgeInsets.only(bottom: 28), children: [
-      PageHeading(title: 'Approvals', subtitle: 'Review purchases submitted by your flatmates.'),
+      const PageHeading(title: 'Approvals', subtitle: 'Review purchases and track approved reimbursements.'),
       if (pending.isEmpty)
-        const Padding(padding: EdgeInsets.all(30), child: Center(child: Column(children: [Icon(Icons.task_alt, size: 52, color: Colors.green), SizedBox(height: 12), Text('You are all caught up!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)), Text('No requests are waiting for a decision.') ])))
+        const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('No requests are waiting for a decision.')))
       else
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 22), child: Column(children: [
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 22), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const SectionTitle('Needs your decision'),
           for (final expense in pending) Card(
             child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -51,7 +54,18 @@ class ApprovalsScreen extends StatelessWidget {
             ])),
           ),
         ])),
-      Padding(padding: const EdgeInsets.fromLTRB(22, 20, 22, 0), child: Card(child: const Padding(padding: EdgeInsets.all(16), child: Text('Default policy: a strict majority of eligible flatmates must approve or reject. The requester cannot vote on their own claim. A production backend must enforce this policy to prevent client-side tampering.')))),
+      if (approved.isNotEmpty) ...[
+        Padding(padding: const EdgeInsets.fromLTRB(22, 24, 22, 12), child: SectionTitle('Approved · awaiting payment')),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 22), child: Column(children: [
+          for (final expense in approved) Card(child: ListTile(
+            leading: const CircleAvatar(child: Icon(Icons.payments_outlined)),
+            title: Text(expense.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: Text('${state.memberName(expense.requesterId)} · approved, unpaid'),
+            trailing: canPay ? FilledButton(onPressed: () => _pay(context, expense.id), child: const Text('Record payment')) : Text(money(expense.amount), style: const TextStyle(fontWeight: FontWeight.w800)),
+          )),
+        ])),
+      ],
+      const Padding(padding: EdgeInsets.fromLTRB(22, 20, 22, 0), child: Card(child: Padding(padding: EdgeInsets.all(16), child: Text('Default policy: a strict majority of eligible flatmates must approve or reject. The requester cannot vote on their own claim. Approval does not change the pool balance until the treasurer records payment. A production backend must enforce these rules.')))),
     ]);
   }
 
@@ -61,6 +75,15 @@ class ApprovalsScreen extends StatelessWidget {
       final result = state.expenses.firstWhere((e) => e.id == id).status;
       final message = result == ExpenseStatus.approved ? 'Request approved. Awaiting treasurer payment.' : result == ExpenseStatus.rejected ? 'Request rejected.' : 'Your vote has been recorded.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } catch (error) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+    }
+  }
+
+  void _pay(BuildContext context, String id) {
+    try {
+      state.markPaid(id);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment recorded and pool balance updated.')));
     } catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
     }
