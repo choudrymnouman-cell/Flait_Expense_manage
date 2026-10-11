@@ -1,13 +1,14 @@
 name: flait_expense_manage
 description: Shared flat expense manager for Android and Web.
 publish_to: "none"
-version: 1.0.0+1
+version: 1.0.0+2
 environment:
   sdk: ">=3.3.0 <4.0.0"
 dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  supabase_flutter: ^2.8.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
