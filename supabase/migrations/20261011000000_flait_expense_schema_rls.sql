@@ -162,3 +162,45 @@ grant select, insert on public.expenses to authenticated;
 grant select, insert on public.expense_votes to authenticated;
 grant select, insert on public.ledger_entries to authenticated;
 grant update (status) on public.expenses to authenticated;
+
+-- Single-use invitations: a flat manager creates a code, then a signed-in roommate redeems it.
+create table public.flat_invites (
+  id uuid primary key default gen_random_uuid(),
+  flat_id uuid not null references public.flats(id) on delete cascade,
+  invite_code text not null unique default encode(gen_random_bytes(12), 'hex'),
+  created_by uuid not null references auth.users(id) on delete restrict,
+  expires_at timestamptz not null default (now() + interval '7 days'),
+  accepted_by uuid references auth.users(id) on delete restrict,
+  accepted_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index flat_invites_flat_id_idx on public.flat_invites(flat_id);
+alter table public.flat_invites enable row level security;
+create policy "flat managers create invites" on public.flat_invites for insert to authenticated
+with check (private.is_flat_manager(flat_id) and created_by = (select auth.uid()) and accepted_by is null);
+create policy "flat managers view invites" on public.flat_invites for select to authenticated
+using (private.is_flat_manager(flat_id));
+
+create or replace function public.accept_flat_invite(p_code text, p_display_name text)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare invite_row public.flat_invites%rowtype;
+begin
+  if (select auth.uid()) is null then raise exception 'Sign in before accepting an invite'; end if;
+  if char_length(trim(coalesce(p_display_name,''))) < 1 or char_length(trim(p_display_name)) > 80 then
+    raise exception 'Enter a valid display name';
+  end if;
+  select * into invite_row from public.flat_invites
+    where invite_code = trim(p_code) and accepted_by is null and expires_at > now()
+    for update;
+  if not found then raise exception 'Invite code is invalid, expired, or already used'; end if;
+  insert into public.flat_members(flat_id, user_id, display_name, role, active)
+    values (invite_row.flat_id, (select auth.uid()), trim(p_display_name), 'member', true)
+    on conflict (flat_id, user_id) do update set active = true;
+  update public.flat_invites set accepted_by = (select auth.uid()), accepted_at = now()
+    where id = invite_row.id;
+  return invite_row.flat_id;
+end;
+$$;
+revoke all on function public.accept_flat_invite(text,text) from public, anon;
+grant execute on function public.accept_flat_invite(text,text) to authenticated;
