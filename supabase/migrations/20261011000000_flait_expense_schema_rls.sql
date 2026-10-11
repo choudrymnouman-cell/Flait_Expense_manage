@@ -104,9 +104,17 @@ using (private.is_flat_manager(flat_id)) with check (private.is_flat_manager(fla
 create policy "flat members read votes" on public.expense_votes for select to authenticated
 using (private.is_flat_member(flat_id));
 create policy "members vote on others requests once" on public.expense_votes for insert to authenticated
-with check (private.is_flat_member(flat_id) and member_id = (select auth.uid()) and exists (
- select 1 from public.expenses e where e.id = expense_id and e.flat_id = flat_id and e.requester_id <> (select auth.uid()) and e.status = 'pending'
-));
+with check (
+  private.is_flat_member(expense_votes.flat_id)
+  and expense_votes.member_id = (select auth.uid())
+  and exists (
+    select 1 from public.expenses e
+    where e.id = expense_votes.expense_id
+      and e.flat_id = expense_votes.flat_id
+      and e.requester_id <> (select auth.uid())
+      and e.status = 'pending'
+  )
+);
 create policy "flat members read ledger" on public.ledger_entries for select to authenticated
 using (private.is_flat_member(flat_id));
 create policy "managers record contributions and withdrawals" on public.ledger_entries for insert to authenticated
