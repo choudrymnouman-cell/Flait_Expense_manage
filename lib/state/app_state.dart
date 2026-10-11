@@ -31,7 +31,13 @@ class FlaitState extends ChangeNotifier {
   FlatMember get currentMember => members.firstWhere((m) => m.id == currentMemberId);
   double get poolBalance => accounting.poolBalance(ledger);
   int get pendingCount => expenses.where((e) => e.status == ExpenseStatus.pending).length;
-  String memberName(String id) => members.where((m) => m.id == id).firstOrNull?.name ?? 'Former member';
+
+  String memberName(String id) {
+    for (final member in members) {
+      if (member.id == id) return member.name;
+    }
+    return 'Former member';
+  }
 
   void submitExpense({
     required String title,
@@ -46,6 +52,7 @@ class FlaitState extends ChangeNotifier {
       e.requesterId == currentMemberId &&
       e.title.trim().toLowerCase() == title.trim().toLowerCase() &&
       e.amount == amount &&
+      DateTime.now().difference(e.createdAt).inSeconds >= 0 &&
       DateTime.now().difference(e.createdAt).inSeconds < 30);
     if (duplicate) throw StateError('A similar request was just submitted.');
     expenses = [
