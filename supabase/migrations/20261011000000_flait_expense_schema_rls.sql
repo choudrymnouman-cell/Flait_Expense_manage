@@ -204,3 +204,28 @@ end;
 $$;
 revoke all on function public.accept_flat_invite(text,text) from public, anon;
 grant execute on function public.accept_flat_invite(text,text) to authenticated;
+
+-- Prevent privileged clients from bypassing the vote quorum by editing expense status directly.
+create or replace function private.guard_expense_status_change()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+declare eligible_count integer; approval_count integer; rejection_count integer; required_votes integer;
+begin
+  if new.status is not distinct from old.status then return new; end if;
+  if old.status = 'approved' and new.status = 'paid' then
+    if not private.is_flat_manager(new.flat_id) then raise exception 'Only a flat manager can record payment'; end if;
+    return new;
+  end if;
+  if old.status <> 'pending' or new.status not in ('approved','rejected') then raise exception 'Invalid expense status transition'; end if;
+  select count(*) into eligible_count from public.flat_members m where m.flat_id = new.flat_id and m.active and m.user_id <> new.requester_id;
+  required_votes := floor(eligible_count / 2.0)::integer + 1;
+  select count(*) filter (where v.approved), count(*) filter (where not v.approved)
+    into approval_count, rejection_count from public.expense_votes v where v.expense_id = new.id;
+  if new.status = 'approved' and approval_count < required_votes then raise exception 'Not enough approval votes'; end if;
+  if new.status = 'rejected' and rejection_count < required_votes then raise exception 'Not enough rejection votes'; end if;
+  return new;
+end;
+$$;
+revoke all on function private.guard_expense_status_change() from public, anon, authenticated;
+create trigger expense_status_guard_before_update before update of status on public.expenses
+for each row execute function private.guard_expense_status_change();
