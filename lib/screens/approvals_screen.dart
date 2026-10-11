@@ -69,9 +69,9 @@ class ApprovalsScreen extends StatelessWidget {
     ]);
   }
 
-  void _vote(BuildContext context, String id, bool approve) {
+  Future<void> _vote(BuildContext context, String id, bool approve) async {
     try {
-      state.vote(id, approve);
+      await state.vote(id, approve);
       final result = state.expenses.firstWhere((e) => e.id == id).status;
       final message = result == ExpenseStatus.approved ? 'Request approved. Awaiting treasurer payment.' : result == ExpenseStatus.rejected ? 'Request rejected.' : 'Your vote has been recorded.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
