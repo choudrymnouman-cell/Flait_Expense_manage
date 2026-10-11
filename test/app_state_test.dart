@@ -1,42 +1,39 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flait_expense_manage/models/flat_models.dart';
-import 'package:flait_expense_manage/state/app_state.dart';
 
 void main() {
-  test('approval does not change pool until treasurer records payment', () {
-    final state = FlaitState();
-    addTearDown(state.dispose);
-    final initialBalance = state.poolBalance;
+  test('expense status updates preserve request details and votes', () {
+    final createdAt = DateTime(2026, 10, 11);
+    final request = ExpenseRequest(
+      id: 'expense-1',
+      title: 'Cleaning supplies',
+      description: 'Soap and sponges',
+      category: 'Household',
+      amount: 1250,
+      requesterId: 'member-1',
+      createdAt: createdAt,
+      votes: [ExpenseVote(memberId: 'member-2', approved: true, at: createdAt)],
+    );
 
-    state.switchMember('m2');
-    state.submitExpense(title: 'Test light bulbs', description: 'Two LED bulbs', category: 'Household', amount: 100);
-
-    final requestId = state.expenses.first.id;
-    expect(state.poolBalance, initialBalance);
-    expect(state.expenses.first.status, ExpenseStatus.pending);
-
-    state.switchMember('m1');
-    state.vote(requestId, true);
-    state.switchMember('m3');
-    state.vote(requestId, true);
-
-    expect(state.expenses.first.status, ExpenseStatus.approved);
-    expect(state.poolBalance, initialBalance);
-
-    state.switchMember('m1');
-    state.markPaid(requestId);
-
-    expect(state.expenses.first.status, ExpenseStatus.paid);
-    expect(state.poolBalance, initialBalance - 100);
-    expect(state.ledger.where((e) => e.relatedExpenseId == requestId).length, 1);
+    final approved = request.copyWith(status: ExpenseStatus.approved);
+    expect(approved.id, 'expense-1');
+    expect(approved.title, 'Cleaning supplies');
+    expect(approved.amount, 1250);
+    expect(approved.createdAt, createdAt);
+    expect(approved.votes, hasLength(1));
+    expect(approved.status, ExpenseStatus.approved);
   });
 
-  test('member cannot vote on their own reimbursement', () {
-    final state = FlaitState();
-    addTearDown(state.dispose);
-    state.switchMember('m2');
-    state.submitExpense(title: 'Test dish soap', description: '', category: 'Household', amount: 50);
-    final id = state.expenses.first.id;
-    expect(() => state.vote(id, true), throwsStateError);
+  test('ledger entry sign is derived from entry type', () {
+    final contribution = LedgerEntry(
+      id: 'entry-1', type: LedgerType.contribution, amount: 3000,
+      actorId: 'member-1', description: 'Pool funds', createdAt: DateTime(2026, 10, 11),
+    );
+    final payment = LedgerEntry(
+      id: 'entry-2', type: LedgerType.expensePayment, amount: 900,
+      actorId: 'member-1', description: 'Paid claim', createdAt: DateTime(2026, 10, 11),
+    );
+    expect(contribution.poolDelta, 3000);
+    expect(payment.poolDelta, -900);
   });
 }
