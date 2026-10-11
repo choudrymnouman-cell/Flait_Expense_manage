@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/flat_models.dart';
 import '../state/app_state.dart';
 import '../widgets/flait_widgets.dart';
@@ -9,29 +10,37 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.only(bottom: 28), children: [
-    const PageHeading(title: 'Settings', subtitle: 'Profile, flat information and demo role selection.'),
+    PageHeading(title: 'Settings', subtitle: 'Your account, flat details and access.'),
     Padding(padding: const EdgeInsets.symmetric(horizontal: 22), child: Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Current demo profile', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+      const Text('Signed-in profile', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
       const SizedBox(height: 12),
-      ListTile(contentPadding: EdgeInsets.zero, leading: const CircleAvatar(child: Icon(Icons.person_outline)), title: Text(state.currentMember.name), subtitle: Text(switch (state.currentMember.role) { MemberRole.treasurer => 'Treasurer', MemberRole.admin => 'Flat admin', MemberRole.member => 'Flatmate' })),
+      ListTile(contentPadding: EdgeInsets.zero, leading: const CircleAvatar(child: Icon(Icons.person_outline)), title: Text(state.currentMember.name), subtitle: Text(Supabase.instance.client.auth.currentUser?.email ?? 'Authenticated account')),
       const Divider(),
-      const Text('Switch active member', style: TextStyle(fontWeight: FontWeight.w700)),
-      const SizedBox(height: 8),
-      for (final member in state.members)
-        RadioListTile<String>(value: member.id, groupValue: state.currentMemberId, title: Text(member.name), subtitle: Text(switch (member.role) { MemberRole.treasurer => 'Treasurer', MemberRole.admin => 'Flat admin', MemberRole.member => 'Member' }), onChanged: (id) { if (id != null) state.switchMember(id); }),
+      Text('Role: ${switch (state.currentMember.role) { MemberRole.treasurer => 'Treasurer', MemberRole.admin => 'Flat admin', MemberRole.member => 'Flatmate' }}'),
+      const SizedBox(height: 10),
+      const Text('Your role is controlled by the flat membership record, not by a demo switch.'),
+      const SizedBox(height: 12),
+      OutlinedButton.icon(
+        onPressed: () async {
+          await Supabase.instance.client.auth.signOut();
+        },
+        icon: const Icon(Icons.logout),
+        label: const Text('Sign out'),
+      ),
     ])))),
-    Padding(padding: const EdgeInsets.fromLTRB(22, 18, 22, 0), child: Card(child: const Padding(padding: EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Flat details', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-      SizedBox(height: 14),
-      _InfoRow(label: 'Flat name', value: 'Flait Demo Flat'),
-      _InfoRow(label: 'Currency', value: 'PKR · Pakistani Rupee'),
-      _InfoRow(label: 'Approval rule', value: 'Strict majority of eligible flatmates'),
-      _InfoRow(label: 'Data storage', value: 'Local in-memory demo'),
+    Padding(padding: const EdgeInsets.fromLTRB(22, 18, 22, 0), child: Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Flat details', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+      const SizedBox(height: 14),
+      _InfoRow(label: 'Flat name', value: state.flatName),
+      _InfoRow(label: 'Currency', value: '${state.currency}'),
+      const _InfoRow(label: 'Approval rule', value: 'Strict majority of eligible flatmates'),
+      const _InfoRow(label: 'Data storage', value: 'Supabase cloud database'),
+      const _InfoRow(label: 'Authentication', value: 'Supabase Auth'),
     ])))),
     const Padding(padding: EdgeInsets.fromLTRB(22, 18, 22, 0), child: Card(child: Padding(padding: EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Before production launch', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+      Text('Privacy and access', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
       SizedBox(height: 10),
-      Text('Connect authenticated cloud storage, enforce permissions on the server, protect receipt uploads, and add backups. Demo role switching is for testing only and is not authentication.'),
+      Text('Flat data is protected by database row-level security. Only active flat members can read that flat’s expenses and ledger. Votes are tied to the signed-in account.'),
     ])))),
   ]);
 }
