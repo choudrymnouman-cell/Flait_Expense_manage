@@ -110,7 +110,7 @@ class FlaitState extends ChangeNotifier {
   }
 
   Future<void> vote(String expenseId, bool approve, {String comment = ''}) async {
-    final expense = expenses.where((e) => e.id == expenseId).firstOrNull;
+    ExpenseRequest? expense;\n    for (final item in expenses) { if (item.id == expenseId) { expense = item; break; } }
     if (expense == null) throw StateError('Expense request not found.');
     if (expense.status != ExpenseStatus.pending) throw StateError('This request is no longer pending.');
     if (expense.requesterId == currentMemberId) throw StateError('You cannot vote on your own request.');
