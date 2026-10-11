@@ -9,7 +9,7 @@ class LedgerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.only(bottom: 28), children: [
-    PageHeading(title: 'Pool ledger', subtitle: 'A chronological view of actual money movement.', trailing: FilledButton.icon(onPressed: () => _showContribution(context), icon: const Icon(Icons.add), label: const Text('Add funds'))),
+    PageHeading(title: 'Pool ledger', subtitle: 'A chronological view of actual money movement.', trailing: FilledButton.icon(onPressed: state.currentMember.role == MemberRole.admin || state.currentMember.role == MemberRole.treasurer ? () => _showContribution(context) : null, icon: const Icon(Icons.add), label: const Text('Add funds'))),
     Padding(padding: const EdgeInsets.symmetric(horizontal: 22), child: BalanceCard(label: 'Current pool balance', value: money(state.poolBalance), icon: Icons.account_balance_wallet_outlined, emphasized: true)),
     Padding(padding: const EdgeInsets.fromLTRB(22, 26, 22, 12), child: SectionTitle('Transactions', trailing: Text('${state.ledger.length} entries'))),
     if (state.ledger.isEmpty)
