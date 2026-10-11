@@ -88,11 +88,10 @@ create policy "users create their own flats" on public.flats for insert to authe
 with check (created_by = (select auth.uid()));
 create policy "flat members can read membership" on public.flat_members for select to authenticated
 using (user_id = (select auth.uid()) or private.is_flat_member(flat_id));
-create policy "authorized flat membership creation" on public.flat_members for insert to authenticated
+create policy "flat creator adds own admin membership" on public.flat_members for insert to authenticated
 with check (
-  (user_id = (select auth.uid()) and role = 'admin'
-   and exists (select 1 from public.flats f where f.id = flat_id and f.created_by = (select auth.uid())))
-  or private.is_flat_manager(flat_id)
+  user_id = (select auth.uid()) and role = 'admin' and active = true
+  and exists (select 1 from public.flats f where f.id = flat_id and f.created_by = (select auth.uid()))
 );
 
 create policy "flat members read expenses" on public.expenses for select to authenticated
