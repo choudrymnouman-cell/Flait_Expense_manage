@@ -27,11 +27,11 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
     super.dispose();
   }
 
-  void submit() {
+  Future<void> submit() async {
     if (saving || !(formKey.currentState?.validate() ?? false)) return;
     setState(() => saving = true);
     try {
-      widget.state.submitExpense(
+      await widget.state.submitExpense(
         title: titleController.text,
         description: descriptionController.text,
         category: category,
