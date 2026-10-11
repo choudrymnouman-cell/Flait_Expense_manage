@@ -96,7 +96,7 @@ with check (private.is_flat_manager(flat_id));
 create policy "flat members read expenses" on public.expenses for select to authenticated
 using (private.is_flat_member(flat_id));
 create policy "members create their own expenses" on public.expenses for insert to authenticated
-with check (private.is_flat_member(flat_id) and requester_id = (select auth.uid()));
+with check (private.is_flat_member(flat_id) and requester_id = (select auth.uid()) and status = 'pending' and paid_at is null);
 create policy "managers update expense status" on public.expenses for update to authenticated
 using (private.is_flat_manager(flat_id)) with check (private.is_flat_manager(flat_id));
 
@@ -229,3 +229,10 @@ $$;
 revoke all on function private.guard_expense_status_change() from public, anon, authenticated;
 create trigger expense_status_guard_before_update before update of status on public.expenses
 for each row execute function private.guard_expense_status_change();
+
+-- Supporting indexes for foreign keys and common membership/ledger lookups.
+create index if not exists flats_created_by_idx on public.flats(created_by);
+create index if not exists expense_votes_flat_id_idx on public.expense_votes(flat_id);
+create index if not exists expense_votes_member_id_idx on public.expense_votes(member_id);
+create index if not exists expenses_requester_id_idx on public.expenses(requester_id);
+create index if not exists ledger_entries_actor_id_idx on public.ledger_entries(actor_id);
