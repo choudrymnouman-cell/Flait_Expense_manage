@@ -18,7 +18,7 @@ self.addEventListener('install',event=>event.waitUntil((async()=>{
  self.skipWaiting();
 })()));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{
- for(const key of await caches.keys()){if(key.startsWith('flait-offline-')&&key!==CACHE)await caches.delete(key);}
+ for(const key of await caches.keys()){if((key.startsWith('flait-offline-')&&key!==CACHE)||['flutter-app-cache','flutter-temp-cache','flutter-app-manifest'].includes(key))await caches.delete(key);}
  await self.clients.claim();
 })()));
 self.addEventListener('fetch',event=>{
