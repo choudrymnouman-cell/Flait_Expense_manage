@@ -7,7 +7,11 @@ class FlaitLogo extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
       label: 'Flait logo',
       image: true,
-      child: CustomPaint(size: Size.square(size), painter: _LogoPainter()));
+      child: Center(
+          widthFactor: 1,
+          heightFactor: 1,
+          child: SizedBox.square(
+              dimension: size, child: CustomPaint(painter: _LogoPainter()))));
 }
 
 class _LogoPainter extends CustomPainter {
