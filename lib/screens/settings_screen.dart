@@ -36,7 +36,7 @@ class SettingsScreen extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 10),
           const Text(
-              'To add a member, the owner creates a sync code. The flatmate enters it on their device; the owner then confirms admission. Both stay online until Sync complete.'),
+              'To add a member, the owner creates a sync code. The flatmate enters it on their device; the owner then confirms admission. Both stay online until Sync complete. After pairing, automatic sync reconnects without codes when both apps are open online. The owner must be online to confirm changes.'),
           const SizedBox(height: 12),
           FilledButton.icon(
               onPressed: () => Navigator.push(
@@ -144,7 +144,7 @@ class SettingsScreen extends StatelessWidget {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               SizedBox(height: 10),
               Text(
-                  'Normal use makes no database requests. Sharing starts only when you open sync; old cloud records are downloaded only when you explicitly import them. Live sharing uses encrypted client broadcasts without database storage or replay. The relay can still see connection metadata. This hosted web page also has its existing ChatGPT access gate.'),
+                  'Expense records stay on your devices. Known flatmates reconnect automatically while the app is open; old cloud records are downloaded only when you explicitly import them. Live sharing uses encrypted client broadcasts without database storage or replay. The relay can still see connection metadata. This hosted web page also has its existing ChatGPT access gate.'),
             ])),
       ]);
 }

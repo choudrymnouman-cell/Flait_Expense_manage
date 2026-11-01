@@ -3,6 +3,7 @@ import 'package:sembast/sembast_memory.dart';
 import 'package:flait_expense_manage/offline/secure_book.dart';
 import 'package:flait_expense_manage/offline/local_database.dart';
 import 'package:flait_expense_manage/offline/live_sync.dart';
+import 'package:flait_expense_manage/offline/auto_sync.dart';
 import 'package:flait_expense_manage/state/app_state.dart';
 
 Future<void> until(bool Function() predicate, String Function() detail) async {
@@ -58,8 +59,28 @@ void main() {
         amount: 12.34);
     expect(member.queuedCount, 1);
     expect(owner.expenses, isEmpty);
-    await exchange();
-    expect(owner.expenses.single.amount, 12.34);
+    final at = member.expenses.single.createdAt;
+    final ownerAuto = AutoSync(owner), memberAuto = AutoSync(member);
+    try {
+      await until(() => owner.expenses.isNotEmpty && member.queuedCount == 0,
+          () => '${ownerAuto.status} / ${memberAuto.status}');
+      expect(owner.expenses.single.createdAt, at);
+      memberAuto.setActive(false);
+      await member.submitExpense(
+          title: 'While offline',
+          description: 'Resume test',
+          category: 'Other',
+          amount: 4.56);
+      await Future<void>.delayed(const Duration(seconds: 1));
+      expect(member.queuedCount, 1);
+      memberAuto.setActive(true);
+      await until(() => owner.expenses.length == 2 && member.queuedCount == 0,
+          () => '${ownerAuto.status} / ${memberAuto.status}');
+    } finally {
+      ownerAuto.dispose();
+      memberAuto.dispose();
+    }
+    expect(owner.expenses.any((e) => e.amount == 12.34), true);
     expect(member.queuedCount, 0);
     expect(canonical(owner.book!.toJson()), canonical(member.book!.toJson()));
   },

@@ -169,7 +169,7 @@ class _SyncScreenState extends State<SyncScreen> {
                                   style: const TextStyle(color: Colors.red))),
                         const SizedBox(height: 24),
                         const Text(
-                            'New members must connect to the flat owner. Existing members can exchange copies, but requests, votes and treasurer entries become shared records only after syncing with the owner. The relay may see connection metadata, never your plaintext ledger.',
+                            'Codes are only needed for first pairing or manual recovery. Paired devices sync automatically while both apps are open online. Requests, votes and treasurer entries become shared records after the owner confirms them. The relay may see connection metadata, never your plaintext ledger.',
                             style: TextStyle(
                                 fontSize: 12, color: Colors.blueGrey)),
                       ]),

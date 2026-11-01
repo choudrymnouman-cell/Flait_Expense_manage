@@ -137,7 +137,9 @@ class LiveRelay {
 }
 
 class SyncSession extends ChangeNotifier {
-  SyncSession(this.state, {this.host = true});
+  SyncSession(this.state,
+      {this.host = true, this.connectionCode, this.trustedPeerId});
+  final String? connectionCode, trustedPeerId;
   final FlaitState state;
   final bool host;
   late final LiveRelay relay = LiveRelay(_receive, (text) {
@@ -156,11 +158,15 @@ class SyncSession extends ChangeNotifier {
   Future<void> start({String? invite}) async {
     if (state.identity == null) throw StateError('Set your name first.');
     if (host && state.book == null) throw StateError('Create a flat first.');
-    code = host ? 'FLAIT2-${randomCode()}' : invite!.trim();
+    code = connectionCode ?? (host ? 'FLAIT2-${randomCode()}' : invite!.trim());
     status = 'Connecting…';
     _notify();
     try {
       await relay.open(code);
+      if (_closed) {
+        await relay.close();
+        return;
+      }
       connected = true;
       status =
           host ? 'Waiting for the other device…' : 'Requesting a connection…';
@@ -219,6 +225,7 @@ class SyncSession extends ChangeNotifier {
     final b = asMap(signed['body']);
     if (b['sid'] == sid) return;
     final author = b['author'] as String;
+    if (trustedPeerId != null && author != trustedPeerId) return;
     if (!await signedBy(signed, author)) {
       throw const FormatException('Invalid device signature.');
     }

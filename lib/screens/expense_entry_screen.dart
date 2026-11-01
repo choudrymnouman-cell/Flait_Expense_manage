@@ -76,8 +76,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
         children: [
           const PageHeading(
             title: 'New expense request',
-            subtitle:
-                'Submit a purchase made with your personal cash for review.',
+            subtitle: 'Date and time are added automatically when you save.',
           ),
           Center(
             child: ConstrainedBox(

@@ -7,10 +7,13 @@ import 'screens/ledger_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/sync_screen.dart';
 import 'state/app_state.dart';
+import 'offline/auto_sync.dart';
+import 'widgets/flait_logo.dart';
 
 class FlaitApp extends StatefulWidget {
-  const FlaitApp({super.key, required this.state});
+  const FlaitApp({super.key, required this.state, this.auto});
   final FlaitState state;
+  final AutoSync? auto;
 
   @override
   State<FlaitApp> createState() => _FlaitAppState();
@@ -22,7 +25,8 @@ class _FlaitAppState extends State<FlaitApp> {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-        animation: state,
+        animation:
+            Listenable.merge([state, if (widget.auto != null) widget.auto!]),
         builder: (context, _) {
           if (state.loading && state.members.isEmpty) {
             return const Scaffold(
@@ -58,6 +62,7 @@ class _FlaitAppState extends State<FlaitApp> {
                   child: Row(
                     children: [
                       const SizedBox(width: 16),
+                      const FlaitLogo(size: 32),
                       IconButton(
                           tooltip: 'Internet sync',
                           onPressed: () => Navigator.push(
@@ -68,7 +73,7 @@ class _FlaitAppState extends State<FlaitApp> {
                       Expanded(
                         child: Text(
                           state.loadError == null
-                              ? 'Saved on this device · ${state.queuedCount} waiting for owner sync'
+                              ? '${widget.auto?.status ?? 'Saved on this device'} · ${state.queuedCount} queued'
                               : 'Local load failed. Showing last loaded data.',
                           style: TextStyle(
                             color: state.loadError == null
@@ -134,11 +139,7 @@ class _FlaitAppState extends State<FlaitApp> {
                         setState(() => selectedIndex = i),
                     leading: const Padding(
                       padding: EdgeInsets.fromLTRB(16, 24, 16, 28),
-                      child: Icon(
-                        Icons.home_work_rounded,
-                        size: 34,
-                        color: Color(0xFF3659C9),
-                      ),
+                      child: FlaitLogo(size: 40),
                     ),
                     destinations: [
                       for (var i = 0; i < labels.length; i++)

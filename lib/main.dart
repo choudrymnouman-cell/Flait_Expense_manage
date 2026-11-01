@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'app.dart';
+import 'offline/auto_sync.dart';
 import 'auth/auth_gate.dart';
 import 'offline/local_database.dart';
 import 'state/app_state.dart';
@@ -29,17 +30,28 @@ class OfflineFlaitApp extends StatefulWidget {
   State<OfflineFlaitApp> createState() => _OfflineFlaitAppState();
 }
 
-class _OfflineFlaitAppState extends State<OfflineFlaitApp> {
+class _OfflineFlaitAppState extends State<OfflineFlaitApp>
+    with WidgetsBindingObserver {
+  late final AutoSync auto;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
+    auto.setActive(lifecycle == AppLifecycleState.resumed);
+  }
+
   late final SemanticsHandle semantics;
   FlaitState get state => widget.state;
   @override
   void initState() {
     super.initState();
     semantics = SemanticsBinding.instance.ensureSemantics();
+    WidgetsBinding.instance.addObserver(this);
+    auto = AutoSync(state);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    auto.dispose();
     semantics.dispose();
     super.dispose();
   }
@@ -79,7 +91,7 @@ class _OfflineFlaitAppState extends State<OfflineFlaitApp> {
               }
               return state.book == null
                   ? OfflineSetupScreen(state: state)
-                  : FlaitApp(state: state);
+                  : FlaitApp(state: state, auto: auto);
             }),
       );
 }

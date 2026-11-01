@@ -61,7 +61,7 @@ class ApprovalsScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      '${state.memberName(expense.requesterId)} · ${expense.category}',
+                                      '${state.memberName(expense.requesterId)} · ${expense.category} · ${expenseDate(expense.createdAt)}',
                                       style: const TextStyle(
                                         color: Colors.blueGrey,
                                       ),
@@ -177,7 +177,7 @@ class ApprovalsScreen extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       subtitle: Text(
-                        '${state.memberName(expense.requesterId)} · approved, unpaid',
+                        '${state.memberName(expense.requesterId)} · approved, unpaid · ${expenseDate(expense.createdAt)}',
                       ),
                       trailing: canPay
                           ? FilledButton(

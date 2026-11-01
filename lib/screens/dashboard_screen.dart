@@ -144,7 +144,7 @@ class DashboardScreen extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     subtitle: Text(
-                      '${state.memberName(expense.requesterId)} · ${expense.category}',
+                      '${state.memberName(expense.requesterId)} · ${expense.category} · ${expenseDate(expense.createdAt)}',
                     ),
                     trailing: Column(
                       mainAxisAlignment: MainAxisAlignment.center,

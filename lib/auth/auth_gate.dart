@@ -1,3 +1,4 @@
+import '../widgets/flait_logo.dart';
 import 'package:flutter/material.dart';
 import '../state/app_state.dart';
 import '../screens/sync_screen.dart';
@@ -62,8 +63,7 @@ class _OfflineSetupScreenState extends State<OfflineSetupScreen> {
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const Icon(Icons.home_work_rounded,
-                                  size: 52, color: Color(0xFF3659C9)),
+                              const FlaitLogo(size: 52),
                               const SizedBox(height: 12),
                               const Text('Flait',
                                   textAlign: TextAlign.center,

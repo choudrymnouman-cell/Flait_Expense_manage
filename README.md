@@ -4,11 +4,13 @@ Flait stores its device identity, flat journal, local claims, votes and ledger i
 
 ## Internet sharing
 
-Open **Settings → Open internet sync**. One person creates a private code; the other enters it. Keep both screens open until **Sync complete**. New members connect to the owner, who explicitly confirms admission before sending the history.
+For first pairing, open **Settings → Open internet sync**. The owner creates a private code; the new member enters it. Keep both screens open until **Sync complete**. The owner explicitly confirms admission before sending the history. Afterwards, paired members reconnect automatically whenever both the owner and member apps are active online. No repeated codes are required. Offline changes are retried automatically, including after app resume. Android force-stop/background restrictions mean this is not an always-running background service.
 
-Sharing uses client-origin Supabase Realtime Broadcast as a live relay. Messages are AES-256-GCM encrypted on-device with a random 256-bit session key before transmission. The relay gets a hash-derived channel name and ciphertext, never the key or plaintext ledger. The app uses no database writes, triggers, presence, broadcast replay or offline server queue for sync. A relay/provider can still observe operational connection metadata; this is not a claim about all provider logging. Both devices must be online. Close the screen to disconnect. Codes expire after ten minutes and pair one session with one device.
+Sharing uses client-origin Supabase Realtime Broadcast as a live relay. Messages are AES-256-GCM encrypted on-device with a random 256-bit session key before transmission. The relay gets a hash-derived channel name and ciphertext, never the key or plaintext ledger. The app uses no database writes, triggers, presence, broadcast replay or offline server queue for sync. A relay/provider can still observe operational connection metadata; this is not a claim about all provider logging. Both devices must be online. Manual codes expire after ten minutes and pair one session with one device. Automatic discovery uses signed public metadata and ephemeral X25519 keys pinned to admitted Ed25519 device identities. HKDF derives the encrypted transport key; financial content is sent only through the encrypted channel. No pairing secret or financial records are stored on the relay. Discovery retries every ten seconds while active.
 
 This design uses **an encrypted live relay**, not a guaranteed direct peer-to-peer socket. It avoids NAT/TURN setup and never uses the server database as the source of financial truth.
+
+Expense creation date and time are captured automatically when saved, displayed in local time, and preserved when synced. Flait branding is applied to the app, Android launcher/splash and web icons.
 
 ## Financial authority and conflict handling
 
