@@ -21,10 +21,14 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.47.8'
           cache: true
 
       - name: Generate Android and Web platform folders
-        run: flutter create . --project-name flait_expense_manage --platforms=android,web
+        run: |
+          flutter create . --project-name flait_expense_manage --platforms=android,web --no-pub
+          python3 scripts/remove_generated_test.py
+          python3 scripts/prepare_android.py
 
       - name: Install dependencies
         run: flutter pub get
@@ -39,7 +43,9 @@ jobs:
         run: flutter build apk --release
 
       - name: Build web app
-        run: flutter build web --release --base-href /
+        run: |
+          flutter build web --release --base-href / --no-web-resources-cdn
+          python3 scripts/offline_cache.py
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4

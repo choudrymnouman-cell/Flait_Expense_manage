@@ -1,161 +1,119 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../app.dart';
+import '../state/app_state.dart';
+import '../screens/sync_screen.dart';
+import '../screens/backup_dialog.dart';
 
-class FlaitAuthApp extends StatelessWidget {
-  const FlaitAuthApp({super.key});
+class OfflineSetupScreen extends StatefulWidget {
+  const OfflineSetupScreen({super.key, required this.state});
+  final FlaitState state;
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'Flait — Flat Expenses',
-    debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF3659C9)),
-      scaffoldBackgroundColor: const Color(0xFFF6F7FB),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true, fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE1E5EF))),
-      ),
-    ),
-    home: const AuthGate(),
-  );
+  State<OfflineSetupScreen> createState() => _OfflineSetupScreenState();
 }
 
-class AuthGate extends StatefulWidget {
-  const AuthGate({super.key});
+class _OfflineSetupScreenState extends State<OfflineSetupScreen> {
+  final name = TextEditingController(), flat = TextEditingController();
+  bool busy = false;
+  String? error;
   @override
-  State<AuthGate> createState() => _AuthGateState();
-}
-
-class _AuthGateState extends State<AuthGate> {
-  bool signUp = false, busy = false, joinMode = false;
-  final email = TextEditingController(), password = TextEditingController();
-  final name = TextEditingController(), flatName = TextEditingController(), inviteCode = TextEditingController();
-  String? error, notice;
+  void initState() {
+    super.initState();
+    name.text = widget.state.identity?.name ?? '';
+  }
 
   @override
   void dispose() {
-    email.dispose(); password.dispose(); name.dispose(); flatName.dispose(); inviteCode.dispose();
+    name.dispose();
+    flat.dispose();
     super.dispose();
   }
 
-  Future<void> submitAuth() async {
-    setState(() { busy = true; error = null; notice = null; });
+  Future<void> proceed(bool create) async {
+    setState(() {
+      busy = true;
+      error = null;
+    });
     try {
-      final auth = Supabase.instance.client.auth;
-      if (signUp) {
-        await auth.signUp(email: email.text.trim(), password: password.text, data: {'display_name': name.text.trim()});
-        if (auth.currentSession == null) setState(() => notice = 'Account created. Check your email to confirm, then sign in.');
-      } else {
-        await auth.signInWithPassword(email: email.text.trim(), password: password.text);
-      }
-    } on AuthException catch (e) {
-      setState(() => error = e.message);
-    } catch (_) {
-      setState(() => error = 'Could not connect. Check your internet and Supabase settings.');
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  Future<void> setupFlat() async {
-    if (name.text.trim().isEmpty || (!joinMode && flatName.text.trim().length < 2) || (joinMode && inviteCode.text.trim().isEmpty)) {
-      setState(() => error = joinMode ? 'Enter your name and the invitation code.' : 'Enter your name and a flat name (at least 2 characters).');
-      return;
-    }
-    setState(() { busy = true; error = null; });
-    try {
-      final db = Supabase.instance.client;
-      final user = db.auth.currentUser!;
-      if (joinMode) {
-        await db.rpc('accept_flat_invite', params: {'p_code': inviteCode.text.trim(), 'p_display_name': name.text.trim()});
-      } else {
-        final flat = await db.from('flats').insert({'name': flatName.text.trim(), 'created_by': user.id}).select('id').single();
-        await db.from('flat_members').insert({
-          'flat_id': flat['id'], 'user_id': user.id,
-          'display_name': name.text.trim(), 'role': 'admin', 'active': true,
-        });
+      await widget.state.prepareIdentity(name.text);
+      if (create) {
+        await widget.state.createFlat(flat.text);
+      } else if (mounted) {
+        await Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+                builder: (_) => SyncScreen(state: widget.state, joinCode: '')));
       }
     } catch (e) {
-      setState(() => error = 'Could not ${joinMode ? 'join flat' : 'create flat'}: $e');
+      if (mounted) setState(() => error = e.toString());
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) => StreamBuilder<AuthState>(
-    stream: Supabase.instance.client.auth.onAuthStateChange,
-    builder: (context, snapshot) {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return _authForm();
-      return FutureBuilder<List<Map<String, dynamic>>>(
-        key: ValueKey(user.id),
-        future: Supabase.instance.client.from('flat_members').select('flat_id, display_name, flats(name,currency)').eq('user_id', user.id).eq('active', true),
-        builder: (context, memberships) {
-          if (memberships.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-          if (memberships.hasError) return Scaffold(body: Center(child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Text('Could not load your flat membership.'),
-              const SizedBox(height: 8), Text('${memberships.error}', textAlign: TextAlign.center),
-              const SizedBox(height: 12), FilledButton(onPressed: () => setState(() {}), child: const Text('Retry')),
-              TextButton(onPressed: () => Supabase.instance.client.auth.signOut(), child: const Text('Sign out')),
-            ]),
-          )));
-          final rows = memberships.data ?? [];
-          if (rows.isEmpty) return _flatSetupForm();
-          return FlaitApp(flatId: rows.first['flat_id'] as String);
-        },
-      );
-    },
-  );
-
-  Widget _authForm() => Scaffold(
-    body: Center(child: SingleChildScrollView(padding: const EdgeInsets.all(24), child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 440),
-      child: Card(child: Padding(padding: const EdgeInsets.all(28), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Icon(Icons.home_work_rounded, size: 54, color: Color(0xFF3659C9)),
-        const SizedBox(height: 12),
-        const Text('Flait', textAlign: TextAlign.center, style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
-        const Text('Shared flat expenses, clearly managed', textAlign: TextAlign.center),
-        const SizedBox(height: 24),
-        if (signUp) TextField(controller: name, decoration: const InputDecoration(labelText: 'Your name')),
-        if (signUp) const SizedBox(height: 12),
-        TextField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
-        const SizedBox(height: 12),
-        TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'Password (at least 6 characters)')),
-        if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-        if (notice != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(notice!, style: const TextStyle(color: Colors.green))),
-        const SizedBox(height: 18),
-        FilledButton(onPressed: busy ? null : submitAuth, child: Text(busy ? 'Please wait…' : signUp ? 'Create account' : 'Sign in')),
-        TextButton(onPressed: busy ? null : () => setState(() { signUp = !signUp; error = null; notice = null; }), child: Text(signUp ? 'Already have an account? Sign in' : 'New here? Create account')),
-      ]))),
-    ))),
-  );
-
-  Widget _flatSetupForm() => Scaffold(
-    appBar: AppBar(actions: [TextButton(onPressed: () => Supabase.instance.client.auth.signOut(), child: const Text('Sign out'))]),
-    body: Center(child: SingleChildScrollView(padding: const EdgeInsets.all(24), child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 460),
-      child: Card(child: Padding(padding: const EdgeInsets.all(24), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Icon(Icons.home_work_rounded, size: 48, color: Color(0xFF3659C9)),
-        const SizedBox(height: 12),
-        Text(joinMode ? 'Join a flat' : 'Set up your flat', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-        Text(joinMode ? 'Ask your flat admin for a one-time invitation code.' : 'You will become the first flat admin. Create a flat or join a flatmate’s invitation.'),
-        const SizedBox(height: 20),
-        TextField(controller: name, decoration: const InputDecoration(labelText: 'Your name'), textInputAction: TextInputAction.next),
-        const SizedBox(height: 12),
-        if (joinMode)
-          TextField(controller: inviteCode, decoration: const InputDecoration(labelText: 'Invitation code'))
-        else
-          TextField(controller: flatName, decoration: const InputDecoration(labelText: 'Flat name', hintText: 'e.g. Satellite Town Flat')),
-        if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-        const SizedBox(height: 18),
-        FilledButton(onPressed: busy ? null : setupFlat, child: Text(busy ? 'Please wait…' : joinMode ? 'Join flat' : 'Create flat')),
-        TextButton(onPressed: busy ? null : () => setState(() { joinMode = !joinMode; error = null; }), child: Text(joinMode ? 'Create a new flat instead' : 'Have an invitation code? Join a flat')),
-      ]))),
-    ))),
-  );
+  Widget build(BuildContext context) => Scaffold(
+      body: Center(
+          child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Card(
+                    child: Padding(
+                        padding: const EdgeInsets.all(28),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Icon(Icons.home_work_rounded,
+                                  size: 52, color: Color(0xFF3659C9)),
+                              const SizedBox(height: 12),
+                              const Text('Flait',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.w900)),
+                              const Text(
+                                  'Your flat. Your devices. Works offline.',
+                                  textAlign: TextAlign.center),
+                              const SizedBox(height: 24),
+                              TextField(
+                                  controller: name,
+                                  enabled: !busy,
+                                  decoration: const InputDecoration(
+                                      labelText: 'Your name')),
+                              const SizedBox(height: 12),
+                              TextField(
+                                  controller: flat,
+                                  enabled: !busy,
+                                  decoration: const InputDecoration(
+                                      labelText:
+                                          'Flat name (to create a flat)')),
+                              if (error != null)
+                                Padding(
+                                    padding: const EdgeInsets.only(top: 12),
+                                    child: Text(error!,
+                                        style: const TextStyle(
+                                            color: Colors.red))),
+                              const SizedBox(height: 20),
+                              FilledButton(
+                                  onPressed: busy ? null : () => proceed(true),
+                                  child:
+                                      const Text('Create flat on this device')),
+                              const SizedBox(height: 12),
+                              OutlinedButton(
+                                  onPressed: busy ? null : () => proceed(false),
+                                  child: const Text(
+                                      'Join a flat using an internet sync code')),
+                              TextButton(
+                                  onPressed: busy
+                                      ? null
+                                      : () => showBackupDialog(
+                                          context, widget.state, restore: true),
+                                  child:
+                                      const Text('Restore encrypted backup')),
+                              const SizedBox(height: 12),
+                              const Text(
+                                  'No email or cloud account required. Creating a flat works offline. To join, both devices must be online. Save a backup: clearing app/browser storage removes your local copy.',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.blueGrey)),
+                            ]))),
+              ))));
 }

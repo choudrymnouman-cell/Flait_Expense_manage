@@ -19,3 +19,6 @@ coverage/
 !.env.example
 *.jks
 *.keystore
+
+# Supabase CLI local cache
+supabase/.temp/

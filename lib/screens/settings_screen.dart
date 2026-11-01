@@ -1,111 +1,150 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/flat_models.dart';
+import '../offline/secure_book.dart';
 import '../state/app_state.dart';
 import '../widgets/flait_widgets.dart';
+import 'backup_dialog.dart';
+import 'sync_screen.dart';
+import 'legacy_import_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key, required this.state});
   final FlaitState state;
-
+  Widget card(Widget child) => Padding(
+      padding: const EdgeInsets.fromLTRB(22, 12, 22, 0),
+      child: Card(
+          child: Padding(padding: const EdgeInsets.all(18), child: child)));
   @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.only(bottom: 28), children: [
-    PageHeading(title: 'Settings', subtitle: 'Your account, flat details and access.'),
-    Padding(padding: const EdgeInsets.symmetric(horizontal: 22), child: Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Signed-in profile', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-      const SizedBox(height: 12),
-      ListTile(contentPadding: EdgeInsets.zero, leading: const CircleAvatar(child: Icon(Icons.person_outline)), title: Text(state.currentMember.name), subtitle: Text(Supabase.instance.client.auth.currentUser?.email ?? 'Authenticated account')),
-      const Divider(),
-      Text('Role: ${switch (state.currentMember.role) { MemberRole.treasurer => 'Treasurer', MemberRole.admin => 'Flat admin', MemberRole.member => 'Flatmate' }}'),
-      const SizedBox(height: 10),
-      const Text('Your permissions come from the flat membership stored in Supabase.'),
-      const SizedBox(height: 12),
-      OutlinedButton.icon(onPressed: () async {
-        await Supabase.instance.client.auth.signOut();
-      }, icon: const Icon(Icons.logout), label: const Text('Sign out')),
-    ])))),
-    Padding(padding: const EdgeInsets.fromLTRB(22, 18, 22, 0), child: Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Flat details', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-      const SizedBox(height: 14),
-      _InfoRow(label: 'Flat name', value: state.flatName),
-      _InfoRow(label: 'Currency', value: state.currency),
-      const _InfoRow(label: 'Approval rule', value: 'Strict majority of eligible flatmates'),
-      const _InfoRow(label: 'Data storage', value: 'Supabase cloud database'),
-      const _InfoRow(label: 'Authentication', value: 'Supabase Auth'),
-    ])))),
-    if (state.currentMember.role == MemberRole.admin)
-      Padding(padding: const EdgeInsets.fromLTRB(22, 18, 22, 0), child: Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Flatmate roles', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-        const SizedBox(height: 8),
-        const Text('As flat admin, assign the treasurer role to a trusted flatmate.'),
-        const SizedBox(height: 8),
-        for (final member in state.members.where((m) => m.id != state.currentMemberId && m.role != MemberRole.admin))
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(member.name),
-            subtitle: Text(member.id),
-            trailing: DropdownButton<MemberRole>(
-              value: member.role,
-              items: const [
-                DropdownMenuItem(value: MemberRole.member, child: Text('Member')),
-                DropdownMenuItem(value: MemberRole.treasurer, child: Text('Treasurer')),
-              ],
-              onChanged: (role) async {
-                if (role == null) return;
-                try {
-                  await state.setMemberRole(member.id, role);
-                } catch (e) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))));
-                }
-              },
-            ),
-          ),
-      ])))),
-    Padding(padding: const EdgeInsets.fromLTRB(22, 18, 22, 0), child: Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Invite a flatmate', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-      const SizedBox(height: 8),
-      const Text('Create a one-time invitation code. It expires after 7 days and can be used by one signed-in roommate.'),
-      const SizedBox(height: 12),
-      FilledButton.icon(
-        onPressed: state.currentMember.role == MemberRole.admin || state.currentMember.role == MemberRole.treasurer
-          ? () => _createInvite(context) : null,
-        icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('Create invitation code'),
-      ),
-    ])))),
-    const Padding(padding: EdgeInsets.fromLTRB(22, 18, 22, 0), child: Card(child: Padding(padding: EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Privacy and access', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-      SizedBox(height: 10),
-      Text('Flat data is protected by database row-level security. Only active flat members can read that flat’s expenses and ledger. Votes are tied to the signed-in account.'),
-    ])))),
-  ]);
-
-  Future<void> _createInvite(BuildContext context) async {
-    try {
-      final code = await state.createInvite();
-      await Clipboard.setData(ClipboardData(text: code));
-      if (!context.mounted) return;
-      await showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
-        title: const Text('Invitation created'),
-        content: SelectableText('Share this code with one flatmate. It expires in 7 days and has been copied to your clipboard:\n\n$code'),
-        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Done'))],
-      ));
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))));
-    }
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
-  final String label;
-  final String value;
-  @override
-  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    SizedBox(width: 125, child: Text(label, style: const TextStyle(color: Colors.blueGrey))),
-    Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))),
-  ]));
+  Widget build(BuildContext context) =>
+      ListView(padding: const EdgeInsets.only(bottom: 28), children: [
+        const PageHeading(
+            title: 'Settings',
+            subtitle: 'Local identity, sharing and backups.'),
+        card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(state.currentMember.name,
+              style:
+                  const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          Text(
+              '${state.flatName} · ${state.currency} · ${state.isOwner ? 'Flat owner' : state.currentMember.role.name}'),
+          const SizedBox(height: 10),
+          SelectableText('Device: ${state.currentMemberId.substring(0, 12)}…'),
+          const Text(
+              'This identity lives on this device. No email login is needed. Use only one active device for the owner identity.'),
+        ])),
+        card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Internet sharing & members',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          const Text(
+              'To add a member, the owner creates a sync code. The flatmate enters it on their device; the owner then confirms admission. Both stay online until Sync complete.'),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+              onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                      builder: (_) => SyncScreen(state: state))),
+              icon: const Icon(Icons.sync),
+              label: const Text('Open internet sync')),
+          Text(
+              '${state.queuedCount} changes waiting for owner confirmation. Last completed exchange: ${state.lastSync ?? 'never'}'),
+        ])),
+        card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Flatmates',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          for (final member in state.members)
+            ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(member.name),
+                subtitle: Text(member.id == state.book!.owner
+                    ? 'Owner · finalizes shared records'
+                    : member.role.name),
+                trailing: state.isOwner && member.id != state.currentMemberId
+                    ? DropdownButton<MemberRole>(
+                        value: member.role,
+                        items: const [
+                          DropdownMenuItem(
+                              value: MemberRole.member, child: Text('Member')),
+                          DropdownMenuItem(
+                              value: MemberRole.treasurer,
+                              child: Text('Treasurer'))
+                        ],
+                        onChanged: (role) async {
+                          if (role == null) return;
+                          try {
+                            await state.setMemberRole(member.id, role);
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(SnackBar(content: Text('$e')));
+                            }
+                          }
+                        })
+                    : null),
+          const Text(
+              'Treasurers can queue money entries offline. The owner validates them before they change the confirmed shared balance.'),
+        ])),
+        card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Device backup',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          const Text(
+              'Keep a password-encrypted backup outside this device. Uninstalling the app or clearing browser storage can erase the local copy. Local app storage itself relies on your device/browser protection.'),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+              onPressed: () => showBackupDialog(context, state),
+              icon: const Icon(Icons.save_alt),
+              label: const Text('Export encrypted backup')),
+        ])),
+        if (state.proposals.isNotEmpty)
+          card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Waiting for owner confirmation',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            for (final p in state.proposals)
+              ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                      '${asMap(p['body'])['kind']} · ${state.memberName(asMap(p['body'])['author'] as String)}'),
+                  subtitle: Text(
+                      '${asMap(asMap(p['body'])['data'])['title'] ?? asMap(asMap(p['body'])['data'])['description'] ?? 'Saved locally; not yet confirmed'}')),
+          ])),
+        if (state.isOwner && state.view!.legacyArchive.isEmpty)
+          card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Previous online version',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            const Text(
+                'Your old cloud data is separate. Import it before requesting cloud deletion.'),
+            TextButton(
+                onPressed: () => showLegacyImport(context, state),
+                child: const Text('Import previous cloud records')),
+          ])),
+        if (state.view!.legacyArchive.isNotEmpty)
+          card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Imported cloud archive · read-only',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            for (final row in state.view!.legacyArchive.where((r) =>
+                ['expenses', 'ledger_entries'].contains(r['table']))) ...[
+              const Divider(),
+              Text(
+                  '${row['table']}: ${asMap(row['record'])['title'] ?? asMap(row['record'])['description'] ?? ''}'),
+              Text(
+                  '${asMap(row['record'])['amount'] ?? ''} · ${asMap(row['record'])['status'] ?? asMap(row['record'])['entry_type'] ?? ''}'),
+            ],
+          ])),
+        if (state.view!.rejected.isNotEmpty)
+          card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Owner review results',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            for (final entry in state.view!.rejected.entries)
+              Text('${entry.key.substring(0, 8)}: ${entry.value}'),
+          ])),
+        card(const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Privacy',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              SizedBox(height: 10),
+              Text(
+                  'Normal use makes no database requests. Sharing starts only when you open sync; old cloud records are downloaded only when you explicitly import them. Live sharing uses encrypted client broadcasts without database storage or replay. The relay can still see connection metadata. This hosted web page also has its existing ChatGPT access gate.'),
+            ])),
+      ]);
 }

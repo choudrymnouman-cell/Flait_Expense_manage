@@ -1,5 +1,7 @@
 enum MemberRole { admin, treasurer, member }
+
 enum ExpenseStatus { pending, approved, rejected, paid }
+
 enum LedgerType { contribution, expensePayment, withdrawal, repayment }
 
 class FlatMember {
@@ -63,19 +65,20 @@ class ExpenseRequest {
     ExpenseStatus? status,
     List<ExpenseVote>? votes,
     DateTime? paidAt,
-  }) => ExpenseRequest(
-    id: id,
-    title: title,
-    description: description,
-    category: category,
-    amount: amount,
-    requesterId: requesterId,
-    createdAt: createdAt,
-    status: status ?? this.status,
-    votes: votes ?? this.votes,
-    receiptReference: receiptReference,
-    paidAt: paidAt ?? this.paidAt,
-  );
+  }) =>
+      ExpenseRequest(
+        id: id,
+        title: title,
+        description: description,
+        category: category,
+        amount: amount,
+        requesterId: requesterId,
+        createdAt: createdAt,
+        status: status ?? this.status,
+        votes: votes ?? this.votes,
+        receiptReference: receiptReference,
+        paidAt: paidAt ?? this.paidAt,
+      );
 }
 
 class LedgerEntry {
@@ -87,10 +90,12 @@ class LedgerEntry {
     required this.description,
     required this.createdAt,
     this.relatedExpenseId,
+    this.memberId,
   });
 
   final String id;
   final LedgerType type;
+
   /// Positive amount; type determines how the pool balance changes.
   final double amount;
   final String actorId;
@@ -98,8 +103,12 @@ class LedgerEntry {
   final DateTime createdAt;
   final String? relatedExpenseId;
 
+  /// Contributor or recipient; actorId is the person who recorded the entry.
+  /// Null on legacy entries whose contributor cannot be reconstructed.
+  final String? memberId;
+
   double get poolDelta => switch (type) {
-    LedgerType.contribution || LedgerType.repayment => amount,
-    LedgerType.expensePayment || LedgerType.withdrawal => -amount,
-  };
+        LedgerType.contribution || LedgerType.repayment => amount,
+        LedgerType.expensePayment || LedgerType.withdrawal => -amount,
+      };
 }
