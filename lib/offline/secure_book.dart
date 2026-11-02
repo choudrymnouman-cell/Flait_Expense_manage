@@ -176,6 +176,7 @@ class BookView {
           throw StateError('Only the owner can revoke/reactivate a member.');
         }
         if (data['active'] == false &&
+            data['security'] != true &&
             expenses.values.any((e) =>
                 !e.cancelled &&
                 [ExpenseStatus.pending, ExpenseStatus.approved]
@@ -185,6 +186,7 @@ class BookView {
               'Resolve pending/unpaid claims involving this member first.');
         }
         if (data['active'] == false &&
+            data['security'] != true &&
             (SettlementService()
                         .balances(expenses.values, ledger, settlements)[m.id] ??
                     0) !=

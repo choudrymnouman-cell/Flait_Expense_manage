@@ -9,7 +9,7 @@ Implemented:
 - Reports/search by date range/member/category/status, monthly shortcut, confirmed category charts, CSV formula-injection protection and PDF export.
 - Device-local monthly bill templates; explicit monthly submission with duplicate period protection, normal approval/payment flow.
 - JPEG/PNG receipts capped at 500 KB and 16 megapixels. Local-only by default; explicit encrypted history sharing. Local-only receipts never enter sync packets.
-- Active/revoked membership, signed leave requests, owner-approved removal after open claims and balances are resolved, two-party owner handoff via recipient-signed acceptance.
+- Active/revoked membership, immediate lost-device revocation preserving all dues, signed leave requests, owner-approved membership removal after open claims and balances are resolved, two-party owner handoff via recipient-signed acceptance.
 - Phone replacement/recovery guide, encrypted backups, weekly in-app backup reminder, local receipts/preferences in backup, app PIN removed on restore.
 - Android local document encryption with AES-256-GCM/device key in secure storage; safe plaintext migration with compaction. Browser relies on origin/device protection.
 - PIN lock, optional OS fingerprint/device passcode, relock on background, retry cooldown; no biometric templates accessible to app. Backups remain password-encrypted.

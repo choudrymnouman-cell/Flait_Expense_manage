@@ -23,7 +23,7 @@
 ## Physical-device acceptance matrix (not claimed completed by CI)
 
 - Android 7/API24 low-memory phone; recent Android 15/16 phone; small and large displays; 200% text scale; dark mode and Urdu RTL.
-- Owner + two member phones: pair, offline queue, reconnect, interrupted transfer, corrections/votes, settlement, member revocation and accepted owner handoff reaching every member.
+- Owner + two member phones: pair, offline queue, reconnect, interrupted transfer, corrections/votes, settlement, lost-device revocation preserving dues, settled-member removal and accepted owner handoff reaching every member.
 - Process kill/reopen; force-stop is not an always-background sync guarantee. Both apps active online for live exchange.
 - Android biometric setup unavailable/cancelled/success; app PIN cold launch/background relock; five wrong attempts and cooldown.
 - Encrypted export, fresh-install restore, wrong password, missing device key, lost phone without backup, app update preserving identity and journal.

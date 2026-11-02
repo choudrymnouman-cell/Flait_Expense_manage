@@ -317,6 +317,8 @@ class FlaitState extends ChangeNotifier {
           rethrow;
         }
       });
+  Future<void> revokeDevice(String id) =>
+      operation('member_active', {'id': id, 'active': false, 'security': true});
   Future<void> requestLeave() => operation('leave_request', {});
   Future<void> setMemberActive(String id, bool active) =>
       operation('member_active', {'id': id, 'active': active});

@@ -62,6 +62,12 @@ class MemberManagementScreen extends StatelessWidget {
                                       'Offer owner transfer',
                                       '${m.name} must accept on their own device. Keep the current owner online until acceptance syncs. After transfer, only the new owner finalizes the journal.',
                                       () => state.offerOwnership(m.id));
+                                } else if (value == 'security') {
+                                  change(
+                                      context,
+                                      'Revoke lost device',
+                                      'Updated peers will stop syncing with this identity. Existing balances, claims and copies remain. This revokes access without writing off any dues.',
+                                      () => state.revokeDevice(m.id));
                                 } else {
                                   change(
                                       context,
@@ -74,10 +80,15 @@ class MemberManagementScreen extends StatelessWidget {
                                 }
                               },
                               itemBuilder: (_) => [
+                                    if (m.active)
+                                      const PopupMenuItem(
+                                          value: 'security',
+                                          child: AppText(
+                                              'Revoke lost device · keep dues')),
                                     PopupMenuItem(
                                         value: 'active',
                                         child: AppText(m.active
-                                            ? 'Revoke device'
+                                            ? 'Remove after settlement'
                                             : 'Reactivate device')),
                                     if (m.active)
                                       const PopupMenuItem(

@@ -11,6 +11,11 @@ void main() {
         y = await AutoHandshake.create(b, 'flat', a.publicId);
     final mx = await x.announcement('a'), my = await y.announcement('b');
     expect(await x.accept(my), await y.accept(mx));
+    final ticket = randomCode();
+    expect(
+        await x.accept(my, ticket: ticket), await y.accept(mx, ticket: ticket));
+    expect(await x.accept(my, ticket: ticket),
+        isNot(await x.accept(my, ticket: randomCode())));
     final outsider = await DeviceIdentity.create('Outsider');
     await expectLater(
         () async => x.accept(await outsider.sign(asMap(my['body']))),

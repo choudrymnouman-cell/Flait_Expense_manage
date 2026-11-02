@@ -124,38 +124,40 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
     if (widget.state.preferences['pin'] == null || unlocked) {
       return widget.child;
     }
-    return Scaffold(
-        body: Center(
-            child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 360),
-                child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.lock_outline, size: 48),
-                      AppText(tr(context, 'Unlock Flait', 'فلیٹ کھولیں'),
-                          style: Theme.of(context).textTheme.headlineSmall),
-                      TextField(
-                          controller: pin,
-                          obscureText: true,
-                          keyboardType: TextInputType.number,
-                          maxLength: 12,
-                          decoration:
-                              const InputDecoration(labelText: 'App PIN'),
-                          onSubmitted: (_) => unlock()),
-                      if (error != null) AppText(error!),
-                      FilledButton(
-                          onPressed: busy ? null : unlock,
-                          child: AppText(tr(context, 'Unlock', 'کھولیں'))),
-                      if (!kIsWeb &&
-                          widget.state.preferences['biometric'] == true)
-                        TextButton.icon(
-                            onPressed:
-                                busy ? null : () => unlock(biometric: true),
-                            icon: const Icon(Icons.fingerprint),
-                            label:
-                                const AppText('Fingerprint / device passcode')),
-                      const AppText(
-                          'Forgot PIN? Restore your encrypted backup on a fresh installation. There is no server recovery.'),
-                    ])))));
+    return Overlay.wrap(
+        child: Scaffold(
+            body: Center(
+                child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 360),
+                    child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.lock_outline, size: 48),
+                          AppText(tr(context, 'Unlock Flait', 'فلیٹ کھولیں'),
+                              style: Theme.of(context).textTheme.headlineSmall),
+                          TextField(
+                              controller: pin,
+                              obscureText: true,
+                              keyboardType: TextInputType.number,
+                              maxLength: 12,
+                              decoration:
+                                  const InputDecoration(labelText: 'App PIN'),
+                              onSubmitted: (_) => unlock()),
+                          if (error != null) AppText(error!),
+                          FilledButton(
+                              onPressed: busy ? null : unlock,
+                              child: AppText(tr(context, 'Unlock', 'کھولیں'))),
+                          if (!kIsWeb &&
+                              widget.state.preferences['biometric'] == true)
+                            TextButton.icon(
+                                onPressed:
+                                    busy ? null : () => unlock(biometric: true),
+                                icon: const Icon(Icons.fingerprint),
+                                label: const AppText(
+                                    'Fingerprint / device passcode')),
+                          const AppText(
+                              'Forgot PIN? Restore your encrypted backup on a fresh installation. There is no server recovery.'),
+                        ]))))));
   }
 }

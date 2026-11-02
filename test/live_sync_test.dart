@@ -102,8 +102,7 @@ void main() {
       await until(
           () => next.view!.transferOffer != null,
           () =>
-              'owners: ${owner.book!.owner == next.currentMemberId}/${next.isOwner}/${third.book!.owner == next.currentMemberId}; expenses: ${owner.expenses.length}/${third.expenses.length}; ' +
-              routes.map((r) => r.status).join(' / '));
+              'owners: ${owner.book!.owner == next.currentMemberId}/${next.isOwner}/${third.book!.owner == next.currentMemberId}; expenses: ${owner.expenses.length}/${third.expenses.length}; ${routes.map((r) => r.status).join(' / ')}');
       await next.acceptOwnership();
       await until(
           () =>
@@ -111,8 +110,7 @@ void main() {
               third.book!.owner == next.currentMemberId &&
               next.isOwner,
           () =>
-              'owners: ${owner.book!.owner == next.currentMemberId}/${next.isOwner}/${third.book!.owner == next.currentMemberId}; expenses: ${owner.expenses.length}/${third.expenses.length}; ' +
-              routes.map((r) => r.status).join(' / '));
+              'owners: ${owner.book!.owner == next.currentMemberId}/${next.isOwner}/${third.book!.owner == next.currentMemberId}; expenses: ${owner.expenses.length}/${third.expenses.length}; ${routes.map((r) => r.status).join(' / ')}');
       await next.submitExpense(
           title: 'After owner handoff',
           description: 'Synthetic only',
@@ -121,8 +119,7 @@ void main() {
       await until(
           () => third.expenses.isNotEmpty && owner.expenses.isNotEmpty,
           () =>
-              'owners: ${owner.book!.owner == next.currentMemberId}/${next.isOwner}/${third.book!.owner == next.currentMemberId}; expenses: ${owner.expenses.length}/${third.expenses.length}; ' +
-              routes.map((r) => r.status).join(' / '));
+              'owners: ${owner.book!.owner == next.currentMemberId}/${next.isOwner}/${third.book!.owner == next.currentMemberId}; expenses: ${owner.expenses.length}/${third.expenses.length}; ${routes.map((r) => r.status).join(' / ')}');
       expect((await third.book!.verify()).owner, next.currentMemberId);
     } finally {
       for (final r in routes) {

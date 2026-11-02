@@ -184,6 +184,20 @@ void main() {
     expect(target.localReceipts['local-receipt'], receipt);
     expect(target.preferences['pin'], isNull);
   });
+  test('lost-device revocation preserves balances without requiring write-off',
+      () async {
+    final o = await device('Owner'), m = await device('Member');
+    await o.createFlat('Flat');
+    await pair(o, m);
+    await o.recordContribution(50, 'Member deposit',
+        contributorId: m.currentMemberId, requestId: 'lost-deposit');
+    await expectLater(
+        o.setMemberActive(m.currentMemberId, false), throwsStateError);
+    await o.revokeDevice(m.currentMemberId);
+    expect(o.view!.members[m.currentMemberId]!.active, false);
+    expect(o.dues[m.currentMemberId], 5000);
+    expect(o.poolBalance, 50);
+  });
   test('CSV export prevents spreadsheet formula injection and quotes commas',
       () {
     expect(csvCell('=CMD()'), '"\'=CMD()"');

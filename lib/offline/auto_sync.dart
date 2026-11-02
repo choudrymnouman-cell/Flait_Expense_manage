@@ -258,9 +258,10 @@ class _Route {
     final sync = SyncSession(state,
         host: host, connectionCode: code, trustedPeerId: peer);
     session = sync;
-    if (const bool.fromEnvironment('FLAIT_LIVE_TEST'))
+    if (const bool.fromEnvironment('FLAIT_LIVE_TEST')) {
       sync.addListener(() => debugPrint(
           '${state.identity!.name} sync ${host ? 'host' : 'join'}: ${sync.status}'));
+    }
     try {
       auto.report('Syncing automatically…');
       await sync.start(invite: code);

@@ -48,4 +48,40 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets('PIN relock covers pushed routes as well as the home screen',
+      (tester) async {
+    final s = (await tester.runAsync(() async {
+      final state = await device('Owner');
+      await state.createFlat('Protected flat');
+      await state.setPreference('pin', await PinSecurity.create('123456'));
+      return state;
+    }))!;
+    await tester.pumpWidget(OfflineFlaitApp(state: s));
+    await tester.pumpAndSettle();
+    expect(find.text('Unlock Flait'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '123456');
+    await tester.runAsync(() => tester.tap(find.text('Unlock')));
+    for (var i = 0;
+        i < 40 && find.text('Reports & search').evaluate().isEmpty;
+        i++) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 250)));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('Reports & search'), findsOneWidget);
+    tester.state<NavigatorState>(find.byType(Navigator)).push(
+        MaterialPageRoute<void>(
+            builder: (_) =>
+                const Scaffold(body: Text('Sensitive pushed page'))));
+    await tester.pumpAndSettle();
+    expect(find.text('Sensitive pushed page'), findsOneWidget);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.text('Sensitive pushed page'), findsNothing);
+    expect(find.text('Unlock Flait'), findsOneWidget);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

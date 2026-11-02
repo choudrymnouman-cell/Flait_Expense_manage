@@ -72,7 +72,13 @@ class _OfflineFlaitAppState extends State<OfflineFlaitApp>
                     textDirection: state.preferences['language'] == 'ur'
                         ? TextDirection.rtl
                         : TextDirection.ltr,
-                    child: child!),
+                    child: LockGate(
+                        state: state,
+                        onLock: (value) {
+                          locked = value;
+                          auto.setActive(!locked);
+                        },
+                        child: child!)),
                 debugShowCheckedModeBanner: false,
                 themeMode: state.preferences['dark'] == true
                     ? ThemeMode.dark
@@ -95,35 +101,29 @@ class _OfflineFlaitAppState extends State<OfflineFlaitApp>
                         fillColor: Colors.white,
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12)))),
-                home: LockGate(
-                    state: state,
-                    onLock: (value) {
-                      locked = value;
-                      auto.setActive(!locked);
-                    },
-                    child: AnimatedBuilder(
-                        animation: state,
-                        builder: (context, _) {
-                          if (state.loadError != null) {
-                            return Scaffold(
-                                body: Center(
-                                    child: Padding(
-                                        padding: const EdgeInsets.all(24),
-                                        child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Text(
-                                                  'Could not read local data. No records were reset.'),
-                                              Text(state.loadError!),
-                                              FilledButton(
-                                                  onPressed: state.load,
-                                                  child: const Text(
-                                                      'Retry local load')),
-                                            ]))));
-                          }
-                          return state.book == null
-                              ? OfflineSetupScreen(state: state)
-                              : FlaitApp(state: state, auto: auto);
-                        })),
+                home: AnimatedBuilder(
+                    animation: state,
+                    builder: (context, _) {
+                      if (state.loadError != null) {
+                        return Scaffold(
+                            body: Center(
+                                child: Padding(
+                                    padding: const EdgeInsets.all(24),
+                                    child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text(
+                                              'Could not read local data. No records were reset.'),
+                                          Text(state.loadError!),
+                                          FilledButton(
+                                              onPressed: state.load,
+                                              child: const Text(
+                                                  'Retry local load')),
+                                        ]))));
+                      }
+                      return state.book == null
+                          ? OfflineSetupScreen(state: state)
+                          : FlaitApp(state: state, auto: auto);
+                    }),
               )));
 }
