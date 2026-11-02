@@ -155,6 +155,7 @@ class SyncSession extends ChangeNotifier {
       _sendingHello = false;
   Timer? _helloTimer, _expiry;
   Future<void> _inbox = Future.value();
+  final Set<String> _finalHeads = {};
   Future<void> start({String? invite}) async {
     if (state.identity == null) throw StateError('Set your name first.');
     if (host && state.book == null) throw StateError('Create a flat first.');
@@ -281,7 +282,7 @@ class SyncSession extends ChangeNotifier {
         await relay.send(await _signed({
           'type': 'ack',
           'target': peerSid,
-          'head': await digest(state.book!.toJson())
+          'head': await digest(asMap(packet['book']))
         }));
         completed = true;
         status = _success();
@@ -292,11 +293,13 @@ class SyncSession extends ChangeNotifier {
         host &&
         author == peerId &&
         b['sid'] == peerSid) {
-      if (b['head'] != await digest(state.book!.toJson())) {
-        throw StateError('Journal changed during sync. Sync once more.');
+      if (!_finalHeads.contains(b['head'])) {
+        throw StateError('Acknowledgment does not match the sent history.');
       }
       completed = true;
-      status = _success();
+      status = b['head'] == await digest(state.book!.toJson())
+          ? _success()
+          : 'Exchange confirmed. Newer local changes will sync next.';
       await state.markSynced();
       _notify();
     }
@@ -315,11 +318,13 @@ class SyncSession extends ChangeNotifier {
   Future<void> _snapshot(String stage) async {
     status = 'Transferring encrypted changes…';
     _notify();
+    final packet = state.sharedPacket();
+    if (stage == 'final') _finalHeads.add(await digest(asMap(packet['book'])));
     await relay.send(await _signed({
       'type': 'snapshot',
       'target': peerSid,
       'stage': stage,
-      'packet': state.sharedPacket()
+      'packet': packet
     }));
     status = 'Waiting for the other device to confirm…';
     _notify();

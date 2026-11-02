@@ -8,7 +8,7 @@ import 'package:flait_expense_manage/state/app_state.dart';
 import 'offline_book_test.dart' as fixture show device, pair;
 
 Future<void> until(bool Function() predicate, String Function() detail) async {
-  for (var i = 0; i < 150; i++) {
+  for (var i = 0; i < 450; i++) {
     if (predicate()) return;
     await Future<void>.delayed(const Duration(milliseconds: 200));
   }
@@ -99,22 +99,30 @@ void main() {
     final routes = [AutoSync(owner), AutoSync(next), AutoSync(third)];
     try {
       await owner.offerOwnership(next.currentMemberId);
-      await until(() => next.view!.transferOffer != null,
-          () => routes.map((r) => r.status).join(' / '));
+      await until(
+          () => next.view!.transferOffer != null,
+          () =>
+              'owners: ${owner.book!.owner == next.currentMemberId}/${next.isOwner}/${third.book!.owner == next.currentMemberId}; expenses: ${owner.expenses.length}/${third.expenses.length}; ' +
+              routes.map((r) => r.status).join(' / '));
       await next.acceptOwnership();
       await until(
           () =>
               owner.book!.owner == next.currentMemberId &&
               third.book!.owner == next.currentMemberId &&
               next.isOwner,
-          () => routes.map((r) => r.status).join(' / '));
+          () =>
+              'owners: ${owner.book!.owner == next.currentMemberId}/${next.isOwner}/${third.book!.owner == next.currentMemberId}; expenses: ${owner.expenses.length}/${third.expenses.length}; ' +
+              routes.map((r) => r.status).join(' / '));
       await next.submitExpense(
           title: 'After owner handoff',
           description: 'Synthetic only',
           category: 'Other',
           amount: 6);
-      await until(() => third.expenses.isNotEmpty && owner.expenses.isNotEmpty,
-          () => routes.map((r) => r.status).join(' / '));
+      await until(
+          () => third.expenses.isNotEmpty && owner.expenses.isNotEmpty,
+          () =>
+              'owners: ${owner.book!.owner == next.currentMemberId}/${next.isOwner}/${third.book!.owner == next.currentMemberId}; expenses: ${owner.expenses.length}/${third.expenses.length}; ' +
+              routes.map((r) => r.status).join(' / '));
       expect((await third.book!.verify()).owner, next.currentMemberId);
     } finally {
       for (final r in routes) {

@@ -22,7 +22,11 @@ class AutoHandshake {
         base64Encode((await key.extractPublicKey()).bytes));
   }
 
-  Future<Map<String, dynamic>> announcement(String change) => identity.sign({
+  Future<Map<String, dynamic>> announcement(String change,
+          {String ticket = '', bool busy = false}) =>
+      identity.sign({
+        'ticket': ticket,
+        'busy': busy,
         'v': 3,
         'group': group,
         'from': identity.publicId,
@@ -32,7 +36,8 @@ class AutoHandshake {
         'change': change,
         'at': DateTime.now().toUtc().toIso8601String(),
       });
-  Future<String> accept(Map<String, dynamic> message) async {
+  Future<String> accept(Map<String, dynamic> message,
+      {String ticket = ''}) async {
     if (!await signedBy(message, peer)) {
       throw const FormatException('Untrusted device');
     }
@@ -47,7 +52,11 @@ class AutoHandshake {
             const Duration(minutes: 2) ||
         b['sid'] is! String ||
         (b['sid'] as String).length != 43 ||
-        b['change'] is! String) {
+        b['change'] is! String ||
+        b['busy'] is! bool ||
+        b['ticket'] is! String ||
+        ![0, 43].contains((b['ticket'] as String).length) ||
+        ![0, 43].contains(ticket.length)) {
       throw const FormatException('Invalid discovery');
     }
     final bytes = base64Decode(b['key'] as String);
@@ -65,7 +74,8 @@ class AutoHandshake {
     final derived = await Hkdf(hmac: Hmac.sha256(), outputLength: 32).deriveKey(
         secretKey: secret,
         nonce: utf8.encode('Flait-auto-v3'),
-        info: utf8.encode(canonical({'group': group, 'peers': endpoints})));
+        info: utf8.encode(
+            canonical({'group': group, 'peers': endpoints, 'ticket': ticket})));
     return 'FLAIT2-${base64UrlEncode(await derived.extractBytes()).replaceAll('=', '')}';
   }
 }
@@ -143,7 +153,13 @@ class _Route {
   SyncSession? session;
   Timer? timer;
   bool closed = false, busy = false, announcing = false, receiving = false;
-  String fingerprint = '', tag = randomCode(), synced = '';
+  String fingerprint = '',
+      tag = randomCode(),
+      synced = '',
+      ticket = '',
+      lastTicket = '',
+      activePeerSid = '';
+  bool get host => state.currentMemberId.compareTo(peer) < 0;
   Future<void> _open() async {
     try {
       handshake =
@@ -170,13 +186,13 @@ class _Route {
           auto.report('Offline · saved locally, sync retries automatically');
         }
       });
-      timer = Timer.periodic(const Duration(seconds: 10), (_) {
+      timer = Timer.periodic(const Duration(seconds: 5), (_) {
         unawaited(_announce());
       });
     } catch (_) {
       if (!closed) {
         auto.report('Offline · automatic sync will retry');
-        timer = Timer(const Duration(seconds: 10), () {
+        timer = Timer(const Duration(seconds: 5), () {
           if (!closed) unawaited(_open());
         });
       }
@@ -197,7 +213,9 @@ class _Route {
     announcing = true;
     try {
       await channel!.sendBroadcastMessage(
-          event: 'discover', payload: await handshake!.announcement(tag));
+          event: 'discover',
+          payload:
+              await handshake!.announcement(tag, ticket: ticket, busy: busy));
     } catch (_) {
       auto.report('Offline · saved locally, sync retries automatically');
     } finally {
@@ -209,12 +227,25 @@ class _Route {
     if (closed || receiving || handshake == null) return;
     receiving = true;
     try {
-      final code = await handshake!.accept(message);
+      await handshake!.accept(message);
       if (closed) return;
       final b = asMap(message['body']);
       auto.peerSeen[peer] = DateTime.now();
+      if (busy) {
+        if (activePeerSid != b['sid']) await session?.close();
+        return;
+      }
       final token = '$tag:${b['sid']}:${b['change']}';
-      if (busy || synced == token) return;
+      if (host) {
+        if (b['busy'] == true || synced == token) return;
+        ticket = randomCode();
+      } else {
+        final offer = b['ticket'] as String;
+        if (b['busy'] != true || offer.isEmpty || offer == lastTicket) return;
+        ticket = offer;
+      }
+      final code = await handshake!.accept(message, ticket: ticket);
+      activePeerSid = b['sid'] as String;
       busy = true;
       unawaited(_exchange(code, token));
       unawaited(_announce());
@@ -225,36 +256,43 @@ class _Route {
 
   Future<void> _exchange(String code, String token) async {
     final sync = SyncSession(state,
-        host: state.currentMemberId.compareTo(peer) < 0,
-        connectionCode: code,
-        trustedPeerId: peer);
+        host: host, connectionCode: code, trustedPeerId: peer);
     session = sync;
+    if (const bool.fromEnvironment('FLAIT_LIVE_TEST'))
+      sync.addListener(() => debugPrint(
+          '${state.identity!.name} sync ${host ? 'host' : 'join'}: ${sync.status}'));
     try {
       auto.report('Syncing automatically…');
       await sync.start(invite: code);
       final deadline = DateTime.now().add(const Duration(seconds: 45));
-      while (!closed && !sync.completed && DateTime.now().isBefore(deadline)) {
+      while (!closed &&
+          sync.connected &&
+          !sync.completed &&
+          DateTime.now().isBefore(deadline)) {
         await Future<void>.delayed(const Duration(milliseconds: 200));
       }
       if (!closed && sync.completed) {
         synced = token;
+        lastTicket = ticket;
         await state.setPreference('peerSync', {
           ...asMap(state.preferences['peerSync'] ?? {}),
           peer: DateTime.now().toUtc().toIso8601String()
         });
         auto.report('Synced automatically · saved on this device');
       } else if (!closed) {
-        auto.report('Waiting for flatmate · automatic retry enabled');
+        auto.report('Retrying: ${sync.status}');
       }
-    } catch (_) {
+    } catch (error) {
       if (!closed) {
-        auto.report('Offline · saved locally, sync retries automatically');
+        auto.report('Sync retry: $error');
       }
     } finally {
       await sync.close();
       sync.dispose();
       if (session == sync) session = null;
       busy = false;
+      ticket = '';
+      unawaited(_announce());
     }
   }
 

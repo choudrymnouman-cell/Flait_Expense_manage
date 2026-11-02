@@ -219,6 +219,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
                                               : 'Enter a positive amount with at most 2 decimals.'),
                                       const SizedBox(height: 14),
                                       DropdownButtonFormField<String>(
+                                          isExpanded: true,
                                           initialValue: category,
                                           decoration: InputDecoration(
                                               labelText: tr(
@@ -255,6 +256,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
                                               .textTheme
                                               .titleMedium),
                                       DropdownButtonFormField<String>(
+                                          isExpanded: true,
                                           initialValue: mode,
                                           decoration: const InputDecoration(
                                               labelText: 'Split method'),
