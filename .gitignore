@@ -19,3 +19,9 @@ coverage/
 !.env.example
 *.jks
 *.keystore
+
+# Supabase CLI local cache
+supabase/.temp/
+
+# Reproducible fonts downloaded by scripts/prepare_assets.py
+assets/fonts/*.ttf

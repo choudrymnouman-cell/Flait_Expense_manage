@@ -1,197 +1,496 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/flat_models.dart';
 import '../services/accounting_service.dart';
+import '../offline/local_database.dart';
+import '../offline/secure_book.dart';
+import '../services/settlement_service.dart';
 
 class FlaitState extends ChangeNotifier {
-  FlaitState({required this.flatId});
-  final String flatId;
-  final db = Supabase.instance.client;
+  FlaitState(this.storage);
+  final LocalDatabase storage;
   final accounting = const AccountingService();
-
-  bool loading = true;
-  String flatName = 'My flat';
-  String currency = 'PKR';
+  DeviceIdentity? identity;
+  SecureBook? book;
+  BookView? view;
+  List<Map<String, dynamic>> proposals = [];
+  int revision = 0;
+  bool loading = true, _disposed = false;
   String? loadError;
-  late List<FlatMember> members = [];
-  late List<LedgerEntry> ledger = [];
-  late List<ExpenseRequest> expenses = [];
-
-  String get currentMemberId => db.auth.currentUser?.id ?? '';
-  FlatMember get currentMember => members.firstWhere(
-    (m) => m.id == currentMemberId,
-    orElse: () => FlatMember(id: currentMemberId, name: db.auth.currentUser?.email ?? 'Member', role: MemberRole.member),
-  );
-  double get poolBalance => accounting.poolBalance(ledger);
-  int get pendingCount => expenses.where((e) => e.status == ExpenseStatus.pending).length;
-
-  String memberName(String id) {
-    for (final member in members) {
-      if (member.id == id) return member.name;
-    }
-    return 'Former member';
+  String? lastSync;
+  Map<String, dynamic> preferences = {};
+  Map<String, dynamic> localReceipts = {};
+  final settlement = SettlementService();
+  Map<String, int> get dues => settlement.balances(
+      view?.expenses.values ?? [], view?.ledger ?? [], view?.settlements ?? []);
+  bool get backupDue {
+    final at = DateTime.tryParse(preferences['backupAt'] as String? ?? '');
+    return at == null || DateTime.now().difference(at).inDays >= 7;
   }
 
-  Future<void> load() async {
-    loading = true;
-    loadError = null;
-    notifyListeners();
-    try {
-      final flat = await db.from('flats').select('name,currency').eq('id', flatId).single();
-      flatName = flat['name'] as String? ?? 'My flat';
-      currency = flat['currency'] as String? ?? 'PKR';
-
-      final memberRows = await db.from('flat_members').select().eq('flat_id', flatId).eq('active', true);
-      members = memberRows.map<FlatMember>((row) => FlatMember(
-        id: row['user_id'] as String,
-        name: row['display_name'] as String? ?? 'Flatmate',
-        role: _role(row['role'] as String?),
-        active: row['active'] as bool? ?? true,
-      )).toList();
-
-      final expenseRows = await db.from('expenses').select().eq('flat_id', flatId).order('created_at', ascending: false);
-      final voteRows = await db.from('expense_votes').select().eq('flat_id', flatId).order('created_at');
-      final votesByExpense = <String, List<ExpenseVote>>{};
-      for (final row in voteRows) {
-        (votesByExpense[row['expense_id'] as String] ??= []).add(ExpenseVote(
-          memberId: row['member_id'] as String,
-          approved: row['approved'] as bool,
-          at: DateTime.parse(row['created_at'] as String),
-          comment: row['comment'] as String? ?? '',
-        ));
+  Future<void> _tail = Future.value();
+  String get flatId => book?.id ?? '';
+  String get flatName => view?.name ?? 'My flat';
+  String get currency => view?.currency ?? 'PKR';
+  String get currentMemberId => identity?.publicId ?? '';
+  bool get isOwner => book != null && book!.owner == currentMemberId;
+  List<FlatMember> get members => view?.members.values.toList() ?? [];
+  FlatMember get currentMember =>
+      view?.members[currentMemberId] ??
+      FlatMember(
+          id: currentMemberId,
+          name: identity?.name ?? 'Member',
+          role: MemberRole.member);
+  List<LedgerEntry> get ledger => (view?.ledger.reversed.toList() ?? []);
+  double get poolBalance => (view?.balanceCents ?? 0) / 100;
+  int get queuedCount => proposals.length;
+  int get pendingCount =>
+      expenses.where((e) => e.status == ExpenseStatus.pending).length;
+  List<ExpenseRequest> get expenses {
+    final result = {...?view?.expenses};
+    for (final draft in proposals) {
+      final b = asMap(draft['body']), d = asMap(b['data']);
+      if (b['kind'] == 'expense' && !result.containsKey(b['id'])) {
+        result[b['id'] as String] = ExpenseRequest(
+            id: b['id'] as String,
+            title: d['title'] as String,
+            description: d['description'] as String,
+            category: d['category'] as String,
+            amount: (d['cents'] as int) / 100,
+            requesterId: b['author'] as String,
+            createdAt: DateTime.parse(b['at'] as String),
+            shares:
+                asMap(d['shares'] ?? {}).map((k, v) => MapEntry(k, v as int)),
+            receiptReference: d['receipt'] as String?,
+            recurringKey: d['recurringKey'] as String?);
       }
-      expenses = expenseRows.map<ExpenseRequest>((row) => ExpenseRequest(
-        id: row['id'] as String,
-        title: row['title'] as String,
-        description: row['description'] as String? ?? '',
-        category: row['category'] as String? ?? 'Other',
-        amount: (row['amount'] as num).toDouble(),
-        requesterId: row['requester_id'] as String,
-        createdAt: DateTime.parse(row['created_at'] as String),
-        status: _status(row['status'] as String?),
-        votes: votesByExpense[row['id'] as String] ?? const [],
-        receiptReference: row['receipt_path'] as String?,
-        paidAt: row['paid_at'] == null ? null : DateTime.parse(row['paid_at'] as String),
-      )).toList();
-
-      final ledgerRows = await db.from('ledger_entries').select().eq('flat_id', flatId).order('created_at', ascending: false);
-      ledger = ledgerRows.map<LedgerEntry>((row) => LedgerEntry(
-        id: row['id'] as String,
-        type: _ledgerType(row['entry_type'] as String),
-        amount: (row['amount'] as num).toDouble(),
-        actorId: row['actor_id'] as String,
-        description: row['description'] as String,
-        createdAt: DateTime.parse(row['created_at'] as String),
-        relatedExpenseId: row['related_expense_id'] as String?,
-      )).toList();
-    } catch (e) {
-      loadError = e.toString();
-    } finally {
-      loading = false;
-      notifyListeners();
     }
+    // Votes remain visibly queued; only owner-confirmed votes affect status.
+    return result.values.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
-  Future<void> submitExpense({
-    required String title,
-    required String description,
-    required String category,
-    required double amount,
-  }) async {
-    if (title.trim().isEmpty || amount <= 0 || !amount.isFinite) {
-      throw ArgumentError('Enter a title and a valid amount greater than zero.');
+  bool voteQueued(String id) => proposals.any((p) {
+        final b = asMap(p['body']);
+        return b['kind'] == 'vote' &&
+            b['author'] == currentMemberId &&
+            asMap(b['data'])['expense'] == id;
+      });
+  bool paymentQueued(String id) => proposals.any((p) {
+        final b = asMap(p['body']);
+        return b['kind'] == 'payment' && asMap(b['data'])['expense'] == id;
+      });
+  String memberName(String id) => view?.members[id]?.name ?? 'Archived member';
+  Map<String, dynamic> _document(DeviceIdentity? who, SecureBook? next,
+          List<Map<String, dynamic>> queue) =>
+      {
+        'schema': 2,
+        'identity': who?.toJson(),
+        'book': next?.toJson(),
+        'proposals': queue,
+        'lastSync': lastSync,
+        'preferences': preferences,
+        'localReceipts': localReceipts,
+      };
+  Future<T> serial<T>(Future<T> Function() action) {
+    final result = _tail.then((_) => action());
+    _tail = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return result;
+  }
+
+  Future<void> _save(DeviceIdentity? who, SecureBook? next,
+      List<Map<String, dynamic>> queue) async {
+    if (utf8.encode(canonical(queue)).length > 1500000) {
+      throw StateError(
+          'Queued data reached 1.5 MB. Sync with the owner before adding more shared receipts.');
     }
-    await db.from('expenses').insert({
-      'flat_id': flatId, 'requester_id': currentMemberId,
-      'title': title.trim(), 'description': description.trim(),
-      'category': category, 'amount': amount, 'status': 'pending',
+    final nextView = next == null ? null : await next.verify();
+    await storage.write(_document(who, next, queue), revision);
+    identity = who;
+    book = next;
+    view = nextView;
+    proposals = queue;
+    revision++;
+    notifyListeners();
+  }
+
+  Future<void> load() => serial(() async {
+        loading = true;
+        loadError = null;
+        notifyListeners();
+        try {
+          final data = await storage.read();
+          if (data != null) {
+            if (data['schema'] != 2) {
+              throw const FormatException(
+                  'Unsupported local data. Restore a backup.');
+            }
+            final who = data['identity'] == null
+                ? null
+                : await DeviceIdentity.fromJson(asMap(data['identity']));
+            final next = data['book'] == null
+                ? null
+                : await SecureBook.fromJson(asMap(data['book']));
+            final nextView = next == null ? null : await next.verify();
+            if (next != null && !nextView!.members.containsKey(who?.publicId)) {
+              throw StateError(
+                  'This device is not a member of the saved flat.');
+            }
+            identity = who;
+            book = next;
+            view = nextView;
+            proposals = asMaps(data['proposals']);
+            for (final draft in proposals) {
+              validateDraftShape(draft);
+              final b = asMap(draft['body']);
+              if (next == null ||
+                  b['group'] != next.id ||
+                  !nextView!.members.containsKey(b['author']) ||
+                  !await signedBy(draft, b['author'] as String)) {
+                throw const FormatException('Invalid local proposal.');
+              }
+            }
+            revision = data['revision'] as int;
+            lastSync = data['lastSync'] as String?;
+            preferences = asMap(data['preferences'] ?? {});
+            localReceipts = asMap(data['localReceipts'] ?? {});
+          }
+        } catch (e) {
+          loadError = e.toString();
+        } finally {
+          loading = false;
+          notifyListeners();
+        }
+      });
+  Future<void> prepareIdentity(String name) => serial(() async {
+        if (name.trim().isEmpty || name.trim().length > 80) {
+          throw ArgumentError('Enter a name of 1–80 characters.');
+        }
+        final who = identity == null
+            ? await DeviceIdentity.create(name)
+            : DeviceIdentity(identity!.seed, identity!.publicId, name.trim());
+        await _save(who, book, proposals);
+      });
+  Future<void> createFlat(String name) => serial(() async {
+        if (book != null ||
+            identity == null ||
+            name.trim().length < 2 ||
+            name.trim().length > 80) {
+          throw ArgumentError('Enter a flat name of 2–80 characters.');
+        }
+        await _save(identity, await SecureBook.create(identity!, name), []);
+      });
+  int _cents(double n) {
+    if (!n.isFinite ||
+        n < 0.01 ||
+        n > 9999999999.99 ||
+        (n * 100 - (n * 100).round()).abs() > 0.0001) {
+      throw ArgumentError('Enter an amount with at most 2 decimal places.');
+    }
+    return (n * 100).round();
+  }
+
+  Future<void> operation(String kind, Map<String, dynamic> data,
+          {String? operationId}) =>
+      serial(() async {
+        if (book == null || identity == null) {
+          throw StateError('Create or join a flat first.');
+        }
+        if (operationId != null &&
+            (view!.processed.contains(operationId) ||
+                proposals.any((p) => asMap(p['body'])['id'] == operationId))) {
+          return;
+        }
+        if (kind == 'vote' && voteQueued(data['expense'] as String)) {
+          throw StateError('Your vote is already saved locally.');
+        }
+        if (kind == 'payment' && paymentQueued(data['expense'] as String)) {
+          throw StateError('This payment is already queued.');
+        }
+        var draft = await makeProposal(identity!, book!, kind, data);
+        if (operationId != null) {
+          draft = await identity!
+              .sign({...asMap(draft['body']), 'id': operationId});
+        }
+        // Check against the current confirmed view, before queueing local work.
+        final preview = await book!.verify();
+        if (kind == 'vote' && !preview.expenses.containsKey(data['expense'])) {
+          throw StateError('Sync this request with the owner before voting.');
+        }
+        preview.apply(draft);
+        if (isOwner) {
+          await _save(
+              identity, await book!.append(identity!, draft), proposals);
+        } else {
+          await _save(identity, book, [...proposals, draft]);
+        }
+      });
+  Future<void> submitExpense(
+          {required String title,
+          required String description,
+          required String category,
+          required double amount,
+          Map<String, int>? shares,
+          String? receipt,
+          String? recurringKey,
+          String? requestId}) =>
+      operation(
+          'expense',
+          {
+            'title': title.trim(),
+            'description': description.trim(),
+            'category': category,
+            'cents': _cents(amount),
+            'shares': shares ??
+                allocateShares(_cents(amount),
+                    {for (final m in members.where((m) => m.active)) m.id: 1}),
+            if (receipt != null) 'receipt': validateReceipt(receipt),
+            if (recurringKey != null) 'recurringKey': recurringKey,
+          },
+          operationId: requestId);
+  Future<void> vote(String id, bool approve, {String comment = ''}) async {
+    if (voteQueued(id)) {
+      throw StateError(
+          'Your vote is already saved locally. Sync with the owner.');
+    }
+    await operation('vote', {
+      'expense': id,
+      'approve': approve,
+      'revision': view!.expenses[id]!.revision
     });
-    await load();
   }
 
-  Future<void> vote(String expenseId, bool approve, {String comment = ''}) async {
-    ExpenseRequest? expense;
-    for (final item in expenses) {
-      if (item.id == expenseId) { expense = item; break; }
+  Future<void> recordContribution(double amount, String description,
+          {required String contributorId, required String requestId}) =>
+      operation(
+          'contribution',
+          {
+            'cents': _cents(amount),
+            'member': contributorId,
+            'description': description.trim().isEmpty
+                ? 'Pool contribution'
+                : description.trim()
+          },
+          operationId: requestId);
+  Future<void> markPaid(String id) async {
+    if (paymentQueued(id)) {
+      throw StateError(
+          'This payment is already queued for owner confirmation.');
     }
-    if (expense == null) throw StateError('Expense request not found.');
-    if (expense.status != ExpenseStatus.pending) throw StateError('This request is no longer pending.');
-    if (expense.requesterId == currentMemberId) throw StateError('You cannot vote on your own request.');
-    if (expense.votes.any((v) => v.memberId == currentMemberId)) throw StateError('You have already voted.');
-    await db.from('expense_votes').insert({
-      'flat_id': flatId, 'expense_id': expenseId, 'member_id': currentMemberId,
-      'approved': approve, 'comment': comment.trim(),
-    });
-    await load();
+    await operation('payment', {'expense': id});
   }
 
-  Future<void> recordContribution(double amount, String description) async {
-    if (currentMember.role != MemberRole.treasurer && currentMember.role != MemberRole.admin) {
-      throw StateError('Only the treasurer or flat admin can record pool contributions.');
-    }
-    if (!amount.isFinite || amount <= 0) throw ArgumentError('Amount must be greater than zero.');
-    await db.from('ledger_entries').insert({
-      'flat_id': flatId, 'actor_id': currentMemberId, 'entry_type': 'contribution',
-      'amount': amount, 'description': description.trim().isEmpty ? 'Pool contribution' : description.trim(),
-    });
-    await load();
+  Future<void> setMemberRole(String id, MemberRole role) => operation('role', {
+        'id': id,
+        'role': role == MemberRole.treasurer ? 'treasurer' : 'member'
+      });
+  Future<void> addMember(String id, String name) async {
+    if (view!.members.containsKey(id)) return;
+    await operation('member', {'id': id, 'name': name});
   }
 
-  Future<void> markPaid(String expenseId) async {
-    if (currentMember.role != MemberRole.treasurer && currentMember.role != MemberRole.admin) {
-      throw StateError('Only the treasurer or flat admin can record payments.');
-    }
-    ExpenseRequest? expense;
-    for (final item in expenses) {
-      if (item.id == expenseId) { expense = item; break; }
-    }
-    if (expense == null) throw StateError('Expense request not found.');
-    if (expense.status != ExpenseStatus.approved) throw StateError('Only approved requests can be paid.');
-    await db.from('expenses').update({'status': 'paid'}).eq('id', expenseId).eq('flat_id', flatId);
-    await load();
+  Future<void> setPreference(String key, dynamic value) => serial(() async {
+        final old = preferences;
+        preferences = {...preferences, key: value};
+        try {
+          await _save(identity, book, proposals);
+        } catch (_) {
+          preferences = old;
+          rethrow;
+        }
+      });
+  Future<void> markBackup() =>
+      setPreference('backupAt', DateTime.now().toUtc().toIso8601String());
+  Future<void> saveLocalReceipt(String id, String encoded) => serial(() async {
+        validateReceipt(encoded);
+        final old = localReceipts;
+        localReceipts = {...localReceipts, id: encoded};
+        if (utf8.encode(canonical(localReceipts)).length > 5000000) {
+          localReceipts = old;
+          throw StateError(
+              'Local receipts reached 5 MB. Keep further receipts outside the app.');
+        }
+        try {
+          await _save(identity, book, proposals);
+        } catch (_) {
+          localReceipts = old;
+          rethrow;
+        }
+      });
+  Future<void> revokeDevice(String id) =>
+      operation('member_active', {'id': id, 'active': false, 'security': true});
+  Future<void> requestLeave() => operation('leave_request', {});
+  Future<void> setMemberActive(String id, bool active) =>
+      operation('member_active', {'id': id, 'active': active});
+  Future<void> offerOwnership(String id) =>
+      operation('transfer_offer', {'to': id});
+  Future<void> acceptOwnership() =>
+      operation('transfer_accept', {'offer': view!.transferOffer});
+  Future<void> cancelTransfer() => operation('transfer_cancel', {});
+  Future<void> recordSettlement(String from, String to, double amount) =>
+      operation(
+          'settlement', {'from': from, 'to': to, 'cents': _cents(amount)});
+  Future<void> cancelExpense(String id, String reason) =>
+      operation('cancel', {'expense': id, 'reason': reason});
+  Future<void> amendExpense(ExpenseRequest expense,
+          {required String title,
+          required String description,
+          required String category,
+          required double amount,
+          required Map<String, int> shares,
+          required String reason}) =>
+      operation('amend', {
+        'expense': expense.id,
+        'revision': expense.revision,
+        'title': title.trim(),
+        'description': description.trim(),
+        'category': category,
+        'cents': _cents(amount),
+        'shares': shares,
+        'reason': reason,
+        'receipt': expense.receiptReference
+      });
+  Future<void> saveRecurring(Map<String, dynamic> template) async {
+    final rows = asMaps(preferences['recurring'] ?? []);
+    rows.removeWhere((r) => r['id'] == template['id']);
+    rows.add(template);
+    await setPreference('recurring', rows);
   }
 
-  Future<void> setMemberRole(String userId, MemberRole role) async {
-    if (currentMember.role != MemberRole.admin) {
-      throw StateError('Only the flat admin can change member roles.');
+  Future<void> removeRecurring(String id) => setPreference(
+      'recurring',
+      asMaps(preferences['recurring'] ?? [])
+          .where((r) => r['id'] != id)
+          .toList());
+  Future<void> submitRecurring(
+      Map<String, dynamic> bill, DateTime month) async {
+    final period = '${month.year}-${month.month.toString().padLeft(2, '0')}';
+    final key = '${currentMemberId.substring(0, 12)}:${bill['id']}:$period';
+    if (view!.recurringKeys.contains(key) ||
+        proposals.any(
+            (p) => asMap(asMap(p['body'])['data'])['recurringKey'] == key)) {
+      throw StateError('This month is already saved.');
     }
-    if (userId == currentMemberId) throw StateError('You cannot change your own role here.');
-    final roleName = switch (role) {
-      MemberRole.admin => 'admin',
-      MemberRole.treasurer => 'treasurer',
-      MemberRole.member => 'member',
-    };
-    await db.from('flat_members').update({'role': roleName})
-      .eq('flat_id', flatId).eq('user_id', userId);
-    await load();
+    await submitExpense(
+        title: '${bill['title']} ($period)',
+        description: 'Recurring bill',
+        category: bill['category'] as String,
+        amount: (bill['cents'] as int) / 100,
+        recurringKey: key);
   }
 
-  Future<String> createInvite() async {
-    if (currentMember.role != MemberRole.admin && currentMember.role != MemberRole.treasurer) {
-      throw StateError('Only the flat admin or treasurer can create invitations.');
-    }
-    final result = await db.from('flat_invites').insert({
-      'flat_id': flatId,
-      'created_by': currentMemberId,
-    }).select('invite_code').single();
-    return result['invite_code'] as String;
+  Map<String, dynamic> sharedPacket() =>
+      {'book': book!.toJson(), 'proposals': proposals};
+  Future<void> receivePacket(Map<String, dynamic> packet) => serial(() async {
+        var next = await SecureBook.fromJson(asMap(packet['book']));
+        if (book != null) next = await book!.merge(next);
+        var nextView = await next.verify();
+        if (!nextView.members.containsKey(currentMemberId)) {
+          throw StateError('The owner has not admitted this device.');
+        }
+        final all = <String, Map<String, dynamic>>{};
+        for (final draft in [...proposals, ...asMaps(packet['proposals'])]) {
+          validateDraftShape(draft);
+          final b = asMap(draft['body']);
+          if (b['group'] != next.id ||
+              !nextView.members.containsKey(b['author']) ||
+              !await signedBy(draft, b['author'] as String)) {
+            throw const FormatException('Invalid or unauthorised proposal.');
+          }
+          final id = b['id'] as String;
+          if (all.containsKey(id) && canonical(all[id]) != canonical(draft)) {
+            throw StateError('Conflicting operation IDs.');
+          }
+          if (!nextView.processed.contains(id)) all[id] = draft;
+        }
+        if (all.length > 1000) throw StateError('Too many queued operations.');
+        final queue = all.values.toList();
+        // Requests precede votes; contributions precede payments. The owner then
+        // serially validates every operation and signs accepted/rejected receipts.
+        int priority(Map<String, dynamic> p) =>
+            switch (asMap(p['body'])['kind']) {
+              'expense' => 0,
+              'contribution' => 1,
+              'vote' => 2,
+              'payment' => 3,
+              _ => 4
+            };
+        queue.sort((a, b) {
+          final order = priority(a).compareTo(priority(b));
+          return order != 0 ? order : canonical(a).compareTo(canonical(b));
+        });
+        if (next.owner == currentMemberId) {
+          for (final draft in queue) {
+            if (next.owner != currentMemberId) break;
+            next = await next.append(identity!, draft, keepRejection: true);
+          }
+          queue.removeWhere(
+              (p) => nextView.processed.contains(asMap(p['body'])['id']));
+        }
+        nextView = await next.verify();
+        await _save(
+            identity,
+            next,
+            queue
+                .where(
+                    (p) => !nextView.processed.contains(asMap(p['body'])['id']))
+                .toList());
+      });
+  Future<String> exportBackup(String password) =>
+      BackupCipher.encrypt(_document(identity, book, proposals), password);
+  Future<void> restoreBackup(String encoded, String password) =>
+      serial(() async {
+        final data = await BackupCipher.decrypt(encoded, password);
+        final who = await DeviceIdentity.fromJson(asMap(data['identity']));
+        final next = data['book'] == null
+            ? null
+            : await SecureBook.fromJson(asMap(data['book']));
+        if (book != null) {
+          throw StateError(
+              'Restore is only available on a fresh installation. Your current flat has not been replaced.');
+        }
+        final queue = asMaps(data['proposals']);
+        if (next != null) {
+          final v = await next.verify();
+          if (!v.members.containsKey(who.publicId)) {
+            throw StateError('Backup identity is not a flat member.');
+          }
+          for (final draft in queue) {
+            validateDraftShape(draft);
+            final b = asMap(draft['body']);
+            if (b['group'] != next.id ||
+                !v.members.containsKey(b['author']) ||
+                !await signedBy(draft, b['author'] as String)) {
+              throw StateError('Invalid backup proposal.');
+            }
+          }
+        }
+        final oldPreferences = preferences, oldReceipts = localReceipts;
+        preferences = asMap(data['preferences'] ?? {})
+          ..remove('pin')
+          ..remove('pinAttempts')
+          ..remove('biometric');
+        localReceipts = asMap(data['localReceipts'] ?? {});
+        try {
+          await _save(who, next, queue);
+        } catch (_) {
+          preferences = oldPreferences;
+          localReceipts = oldReceipts;
+          rethrow;
+        }
+      });
+  Future<void> markSynced() => serial(() async {
+        lastSync = DateTime.now().toUtc().toIso8601String();
+        await _save(identity, book, proposals);
+      });
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
   }
 
-  MemberRole _role(String? role) => switch (role) {
-    'admin' => MemberRole.admin,
-    'treasurer' => MemberRole.treasurer,
-    _ => MemberRole.member,
-  };
-  ExpenseStatus _status(String? status) => switch (status) {
-    'approved' => ExpenseStatus.approved,
-    'rejected' => ExpenseStatus.rejected,
-    'paid' => ExpenseStatus.paid,
-    _ => ExpenseStatus.pending,
-  };
-  LedgerType _ledgerType(String type) => switch (type) {
-    'repayment' => LedgerType.repayment,
-    'expense_payment' => LedgerType.expensePayment,
-    'withdrawal' => LedgerType.withdrawal,
-    _ => LedgerType.contribution,
-  };
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 }

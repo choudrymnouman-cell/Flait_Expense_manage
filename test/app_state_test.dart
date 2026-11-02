@@ -26,12 +26,20 @@ void main() {
 
   test('ledger entry sign is derived from entry type', () {
     final contribution = LedgerEntry(
-      id: 'entry-1', type: LedgerType.contribution, amount: 3000,
-      actorId: 'member-1', description: 'Pool funds', createdAt: DateTime(2026, 10, 11),
+      id: 'entry-1',
+      type: LedgerType.contribution,
+      amount: 3000,
+      actorId: 'member-1',
+      description: 'Pool funds',
+      createdAt: DateTime(2026, 10, 11),
     );
     final payment = LedgerEntry(
-      id: 'entry-2', type: LedgerType.expensePayment, amount: 900,
-      actorId: 'member-1', description: 'Paid claim', createdAt: DateTime(2026, 10, 11),
+      id: 'entry-2',
+      type: LedgerType.expensePayment,
+      amount: 900,
+      actorId: 'member-1',
+      description: 'Paid claim',
+      createdAt: DateTime(2026, 10, 11),
     );
     expect(contribution.poolDelta, 3000);
     expect(payment.poolDelta, -900);
