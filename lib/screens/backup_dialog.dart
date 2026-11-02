@@ -1,3 +1,4 @@
+import '../services/app_preferences.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
@@ -54,6 +55,7 @@ class _BackupDialogState extends State<_BackupDialog> {
             type: FileType.custom,
             allowedExtensions: ['flait'],
             bytes: Uint8List.fromList(utf8.encode(text)));
+        if (path != null) await widget.state.markBackup();
         if (mounted) {
           setState(() => message = path == null
               ? 'Save cancelled.'
@@ -75,13 +77,13 @@ class _BackupDialogState extends State<_BackupDialog> {
   Widget build(BuildContext context) => PopScope(
       canPop: !busy,
       child: AlertDialog(
-        title: Text(widget.restore
+        title: AppText(widget.restore
             ? 'Restore device backup'
             : 'Encrypted local backup'),
         content: SizedBox(
             width: 420,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(widget.restore
+              AppText(widget.restore
                   ? 'Restore only on a fresh installation. An owner backup replaces the ORIGINAL owner device: never operate two copies of the owner identity.'
                   : 'The file contains your local records and device identity. It is password-encrypted on this device and is not uploaded. There is no server password recovery.'),
               const SizedBox(height: 16),
@@ -94,15 +96,15 @@ class _BackupDialogState extends State<_BackupDialog> {
               if (message != null)
                 Padding(
                     padding: const EdgeInsets.only(top: 12),
-                    child: Text(message!)),
+                    child: AppText(message!)),
             ])),
         actions: [
           TextButton(
               onPressed: busy ? null : () => Navigator.pop(context),
-              child: const Text('Close')),
+              child: const AppText('Close')),
           FilledButton(
               onPressed: busy ? null : act,
-              child: Text(busy
+              child: AppText(busy
                   ? 'Working…'
                   : widget.restore
                       ? 'Choose backup & restore'

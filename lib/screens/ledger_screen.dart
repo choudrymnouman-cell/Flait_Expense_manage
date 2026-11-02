@@ -1,3 +1,4 @@
+import '../services/app_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
@@ -22,7 +23,7 @@ class LedgerScreen extends StatelessWidget {
                   ? () => _showContribution(context)
                   : null,
               icon: const Icon(Icons.add),
-              label: const Text('Add funds'),
+              label: const AppText('Add funds'),
             ),
           ),
           Padding(
@@ -38,13 +39,13 @@ class LedgerScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(22, 26, 22, 12),
             child: SectionTitle(
               'Transactions',
-              trailing: Text('${state.ledger.length} entries'),
+              trailing: AppText('${state.ledger.length} entries'),
             ),
           ),
           if (state.ledger.isEmpty)
             const Padding(
               padding: EdgeInsets.all(30),
-              child: Center(child: Text('No transactions yet.')),
+              child: Center(child: AppText('No transactions yet.')),
             )
           else
             Padding(
@@ -70,7 +71,7 @@ class LedgerScreen extends StatelessWidget {
             ),
           const Padding(
             padding: EdgeInsets.fromLTRB(22, 16, 22, 0),
-            child: Text(
+            child: AppText(
               'Only recorded contributions, repayments, withdrawals and paid expenses affect the pool. Pending and approved-but-unpaid requests do not.',
               style: TextStyle(color: Colors.blueGrey, fontSize: 12),
             ),
@@ -85,7 +86,7 @@ class LedgerScreen extends StatelessWidget {
     );
     if (!context.mounted || recorded != true) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
+        content: AppText(
             'Contribution saved. Treasurer entries need owner sync before affecting the shared pool.')));
   }
 }
@@ -120,15 +121,15 @@ class _LedgerTile extends StatelessWidget {
           color: incoming ? Colors.green : Colors.red,
         ),
       ),
-      title: Text(
+      title: AppText(
         entry.description,
         style: const TextStyle(fontWeight: FontWeight.w700),
       ),
-      subtitle: Text(
+      subtitle: AppText(
         '$label · $memberName\nRecorded by $actorName · ${entry.createdAt.toLocal().toString().substring(0, 16)}',
       ),
       isThreeLine: true,
-      trailing: Text(
+      trailing: AppText(
         '${incoming ? '+' : '−'}${money(entry.amount, currency: currency)}',
         style: TextStyle(
           fontWeight: FontWeight.w800,
@@ -193,7 +194,7 @@ class _ContributionDialogState extends State<_ContributionDialog> {
   Widget build(BuildContext context) => PopScope(
         canPop: !saving,
         child: AlertDialog(
-          title: const Text('Record pool contribution'),
+          title: const AppText('Record pool contribution'),
           content: SizedBox(
             width: 360,
             child: Column(
@@ -206,8 +207,8 @@ class _ContributionDialogState extends State<_ContributionDialog> {
                   items: widget.state.members
                       .where((m) => m.active)
                       .map(
-                        (m) =>
-                            DropdownMenuItem(value: m.id, child: Text(m.name)),
+                        (m) => DropdownMenuItem(
+                            value: m.id, child: AppText(m.name)),
                       )
                       .toList(),
                   onChanged: saving
@@ -234,8 +235,8 @@ class _ContributionDialogState extends State<_ContributionDialog> {
                 if (error != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
-                    child:
-                        Text(error!, style: const TextStyle(color: Colors.red)),
+                    child: AppText(error!,
+                        style: const TextStyle(color: Colors.red)),
                   ),
               ],
             ),
@@ -243,11 +244,11 @@ class _ContributionDialogState extends State<_ContributionDialog> {
           actions: [
             TextButton(
               onPressed: saving ? null : () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: const AppText('Cancel'),
             ),
             FilledButton(
               onPressed: saving ? null : save,
-              child: Text(saving ? 'Saving…' : 'Save'),
+              child: AppText(saving ? 'Saving…' : 'Save'),
             ),
           ],
         ),

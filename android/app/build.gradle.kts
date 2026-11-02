@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.flait_expense_manage"
+    namespace = "com.flait.expenses"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -16,7 +16,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.flait_expense_manage"
+        applicationId = "com.flait.expenses"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 24
@@ -29,11 +29,27 @@ android {
         versionName = flutter.versionName
     }
 
+    val releaseKeyPath = System.getenv("FLAIT_KEYSTORE_PATH")
+    signingConfigs {
+        if (!releaseKeyPath.isNullOrBlank()) {
+            create("production") {
+                storeFile = file(releaseKeyPath)
+                storePassword = System.getenv("FLAIT_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("FLAIT_KEY_ALIAS") ?: "flait-upload"
+                keyPassword = System.getenv("FLAIT_KEY_PASSWORD") ?: System.getenv("FLAIT_KEYSTORE_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            if (!releaseKeyPath.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("production")
+            } else if (System.getenv("FLAIT_TEST_BUILD") == "true") {
+                // Explicit CI/device-test artifacts; never a Play production key.
+                signingConfig = signingConfigs.getByName("debug")
+            } else {
+                throw GradleException("Provide FLAIT_KEYSTORE_PATH and passwords for a production release, or explicitly set FLAIT_TEST_BUILD=true for test artifacts.")
+            }
         }
     }
 }

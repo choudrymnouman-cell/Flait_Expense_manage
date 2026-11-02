@@ -5,6 +5,7 @@ import 'package:flait_expense_manage/offline/local_database.dart';
 import 'package:flait_expense_manage/offline/live_sync.dart';
 import 'package:flait_expense_manage/offline/auto_sync.dart';
 import 'package:flait_expense_manage/state/app_state.dart';
+import 'offline_book_test.dart' as fixture show device, pair;
 
 Future<void> until(bool Function() predicate, String Function() detail) async {
   for (var i = 0; i < 150; i++) {
@@ -83,6 +84,43 @@ void main() {
     expect(owner.expenses.any((e) => e.amount == 12.34), true);
     expect(member.queuedCount, 0);
     expect(canonical(owner.book!.toJson()), canonical(member.book!.toJson()));
+  },
+      skip: !const bool.fromEnvironment('FLAIT_LIVE_TEST'),
+      timeout: const Timeout(Duration(minutes: 3)));
+  test('automatic owner handoff reaches a third member with stale authority',
+      () async {
+    final owner = await fixture.device('Live owner'),
+        next = await fixture.device('Live successor'),
+        third = await fixture.device('Live third');
+    await owner.createFlat('Synthetic handoff test');
+    await fixture.pair(owner, next);
+    await fixture.pair(owner, third);
+    await next.receivePacket(owner.sharedPacket());
+    final routes = [AutoSync(owner), AutoSync(next), AutoSync(third)];
+    try {
+      await owner.offerOwnership(next.currentMemberId);
+      await until(() => next.view!.transferOffer != null,
+          () => routes.map((r) => r.status).join(' / '));
+      await next.acceptOwnership();
+      await until(
+          () =>
+              owner.book!.owner == next.currentMemberId &&
+              third.book!.owner == next.currentMemberId &&
+              next.isOwner,
+          () => routes.map((r) => r.status).join(' / '));
+      await next.submitExpense(
+          title: 'After owner handoff',
+          description: 'Synthetic only',
+          category: 'Other',
+          amount: 6);
+      await until(() => third.expenses.isNotEmpty && owner.expenses.isNotEmpty,
+          () => routes.map((r) => r.status).join(' / '));
+      expect((await third.book!.verify()).owner, next.currentMemberId);
+    } finally {
+      for (final r in routes) {
+        r.dispose();
+      }
+    }
   },
       skip: !const bool.fromEnvironment('FLAIT_LIVE_TEST'),
       timeout: const Timeout(Duration(minutes: 3)));

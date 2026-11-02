@@ -1,3 +1,4 @@
+import '../services/app_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../offline/live_sync.dart';
@@ -47,7 +48,7 @@ class _SyncScreenState extends State<SyncScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Internet sync')),
+        appBar: AppBar(title: const AppText('Internet sync')),
         body: Center(
             child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 640),
@@ -59,13 +60,13 @@ class _SyncScreenState extends State<SyncScreen> {
                         const Icon(Icons.devices_rounded,
                             size: 48, color: Color(0xFF3659C9)),
                         const SizedBox(height: 16),
-                        Text(
+                        AppText(
                             widget.state.book == null
                                 ? 'Join your flat'
                                 : 'Share changes, keep data on your devices',
                             style: Theme.of(context).textTheme.headlineSmall),
                         const SizedBox(height: 12),
-                        const Text(
+                        const AppText(
                             'Both people must keep this screen open and stay online. Messages are encrypted on your device and passed through a live relay; this app does not save them in a server database. Close this screen to disconnect.'),
                         const SizedBox(height: 20),
                         if (session == null) ...[
@@ -73,7 +74,7 @@ class _SyncScreenState extends State<SyncScreen> {
                             FilledButton.icon(
                                 onPressed: busy ? null : () => start(true),
                                 icon: const Icon(Icons.add_link),
-                                label: const Text('Create a sync code')),
+                                label: const AppText('Create a sync code')),
                           const SizedBox(height: 16),
                           TextField(
                               controller: code,
@@ -86,7 +87,7 @@ class _SyncScreenState extends State<SyncScreen> {
                           const SizedBox(height: 12),
                           OutlinedButton(
                               onPressed: busy ? null : () => start(false),
-                              child: const Text('Connect with code')),
+                              child: const AppText('Connect with code')),
                         ] else
                           AnimatedBuilder(
                               animation: session!,
@@ -97,7 +98,7 @@ class _SyncScreenState extends State<SyncScreen> {
                                         CrossAxisAlignment.stretch,
                                     children: [
                                       if (s.host && s.connected) ...[
-                                        const Text(
+                                        const AppText(
                                             'Share this private code with ONE flatmate. It lasts 10 minutes.'),
                                         const SizedBox(height: 12),
                                         SelectableText(s.code,
@@ -109,22 +110,22 @@ class _SyncScreenState extends State<SyncScreen> {
                                                   ClipboardData(text: s.code));
                                             },
                                             icon: const Icon(Icons.copy),
-                                            label:
-                                                const Text('Copy sync code')),
+                                            label: const AppText(
+                                                'Copy sync code')),
                                       ],
                                       const SizedBox(height: 12),
                                       Card(
                                           child: Padding(
                                               padding: const EdgeInsets.all(16),
-                                              child: Text(s.status,
+                                              child: AppText(s.status,
                                                   style: const TextStyle(
                                                       fontWeight:
                                                           FontWeight.w700)))),
                                       if (s.awaitingAdmission) ...[
                                         const SizedBox(height: 12),
-                                        Text(
+                                        AppText(
                                             'New member: ${s.peerName}\nDevice: ${s.peerId?.substring(0, 12)}…'),
-                                        const Text(
+                                        const AppText(
                                             'Confirm that this is your flatmate. Admitting this device gives it a copy of the flat history.'),
                                         const SizedBox(height: 12),
                                         FilledButton(
@@ -146,7 +147,7 @@ class _SyncScreenState extends State<SyncScreen> {
                                                       }
                                                     }
                                                   },
-                                            child: const Text(
+                                            child: const AppText(
                                                 'Admit this flatmate & sync')),
                                       ],
                                       const SizedBox(height: 12),
@@ -158,17 +159,17 @@ class _SyncScreenState extends State<SyncScreen> {
                                                   if (!context.mounted) return;
                                                   Navigator.pop(context);
                                                 },
-                                          child:
-                                              const Text('Close & disconnect')),
+                                          child: const AppText(
+                                              'Close & disconnect')),
                                     ]);
                               }),
                         if (error != null)
                           Padding(
                               padding: const EdgeInsets.only(top: 16),
-                              child: Text(error!,
+                              child: AppText(error!,
                                   style: const TextStyle(color: Colors.red))),
                         const SizedBox(height: 24),
-                        const Text(
+                        const AppText(
                             'Codes are only needed for first pairing or manual recovery. Paired devices sync automatically while both apps are open online. Requests, votes and treasurer entries become shared records after the owner confirms them. The relay may see connection metadata, never your plaintext ledger.',
                             style: TextStyle(
                                 fontSize: 12, color: Colors.blueGrey)),

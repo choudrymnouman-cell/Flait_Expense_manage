@@ -13,6 +13,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      FLAIT_TEST_BUILD: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,6 +31,7 @@ jobs:
           flutter create . --project-name flait_expense_manage --platforms=android,web --no-pub
           python3 scripts/remove_generated_test.py
           python3 scripts/prepare_android.py
+          python3 scripts/prepare_assets.py
 
       - name: Install dependencies
         run: flutter pub get
@@ -42,6 +45,9 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
+      - name: Build Android App Bundle (CI test signing; re-sign before Play upload)
+        run: flutter build appbundle --release
+
       - name: Build web app
         run: |
           flutter build web --release --base-href / --no-web-resources-cdn
@@ -52,6 +58,14 @@ jobs:
         with:
           name: flait-android-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Android App Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: flait-android-bundle-test-signed
+          path: build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 30
 

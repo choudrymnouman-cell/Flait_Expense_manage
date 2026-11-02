@@ -1,3 +1,4 @@
+import '../services/app_preferences.dart';
 import 'package:flutter/material.dart';
 
 import '../models/flat_models.dart';
@@ -33,7 +34,7 @@ class PageHeading extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  AppText(
                     title,
                     style: Theme.of(context)
                         .textTheme
@@ -41,7 +42,7 @@ class PageHeading extends StatelessWidget {
                         ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 5),
-                  Text(
+                  AppText(
                     subtitle,
                     style: Theme.of(context)
                         .textTheme
@@ -74,7 +75,9 @@ class BalanceCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: emphasized ? const Color(0xFF3659C9) : Colors.white,
+          color: emphasized
+              ? const Color(0xFF3659C9)
+              : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color:
@@ -89,15 +92,17 @@ class BalanceCard extends StatelessWidget {
               color: emphasized ? Colors.white70 : const Color(0xFF3659C9),
             ),
             const SizedBox(height: 18),
-            Text(
+            AppText(
               value,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w800,
-                    color: emphasized ? Colors.white : const Color(0xFF1E2638),
+                    color: emphasized
+                        ? Colors.white
+                        : Theme.of(context).colorScheme.onSurface,
                   ),
             ),
             const SizedBox(height: 5),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 color: emphasized ? Colors.white70 : Colors.blueGrey,
@@ -126,7 +131,7 @@ class ExpenseStatusChip extends StatelessWidget {
         color: color.withValues(alpha: .10),
         borderRadius: BorderRadius.circular(30),
       ),
-      child: Text(
+      child: AppText(
         label,
         style: TextStyle(
           color: color,
@@ -149,7 +154,7 @@ class SectionTitle extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
+              child: AppText(
                 title,
                 style: Theme.of(context)
                     .textTheme

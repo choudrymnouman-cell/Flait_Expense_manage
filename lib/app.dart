@@ -5,7 +5,8 @@ import 'screens/dashboard_screen.dart';
 import 'screens/expense_entry_screen.dart';
 import 'screens/ledger_screen.dart';
 import 'screens/settings_screen.dart';
-import 'screens/sync_screen.dart';
+import 'screens/sync_status_screen.dart';
+import 'services/app_preferences.dart';
 import 'state/app_state.dart';
 import 'offline/auto_sync.dart';
 import 'widgets/flait_logo.dart';
@@ -40,13 +41,13 @@ class _FlaitAppState extends State<FlaitApp> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('Could not load flat data.'),
+                      const AppText('Could not load flat data.'),
                       const SizedBox(height: 8),
-                      Text(state.loadError!, textAlign: TextAlign.center),
+                      AppText(state.loadError!, textAlign: TextAlign.center),
                       const SizedBox(height: 12),
                       FilledButton(
                         onPressed: state.load,
-                        child: const Text('Retry'),
+                        child: const AppText('Retry'),
                       ),
                     ],
                   ),
@@ -68,10 +69,11 @@ class _FlaitAppState extends State<FlaitApp> {
                           onPressed: () => Navigator.push(
                               context,
                               MaterialPageRoute<void>(
-                                  builder: (_) => SyncScreen(state: state))),
+                                  builder: (_) => SyncStatusScreen(
+                                      state: state, auto: widget.auto))),
                           icon: const Icon(Icons.sync)),
                       Expanded(
-                        child: Text(
+                        child: AppText(
                           state.loadError == null
                               ? '${widget.auto?.status ?? 'Saved on this device'} · ${state.queuedCount} queued'
                               : 'Local load failed. Showing last loaded data.',
@@ -112,7 +114,7 @@ class _FlaitAppState extends State<FlaitApp> {
             ),
             ApprovalsScreen(state: state),
             LedgerScreen(state: state),
-            SettingsScreen(state: state),
+            SettingsScreen(state: state, auto: widget.auto),
           ];
           final labels = [
             'Dashboard',
@@ -145,7 +147,7 @@ class _FlaitAppState extends State<FlaitApp> {
                       for (var i = 0; i < labels.length; i++)
                         NavigationRailDestination(
                           icon: Icon(icons[i]),
-                          label: Text(labels[i]),
+                          label: AppText(localize(context, labels[i])),
                         ),
                     ],
                   ),
@@ -164,7 +166,8 @@ class _FlaitAppState extends State<FlaitApp> {
                 for (var i = 0; i < labels.length; i++)
                   NavigationDestination(
                     icon: Icon(icons[i]),
-                    label: labels[i] == 'New expense' ? 'Add' : labels[i],
+                    label: localize(context,
+                        labels[i] == 'New expense' ? 'Add' : labels[i]),
                   ),
               ],
             ),

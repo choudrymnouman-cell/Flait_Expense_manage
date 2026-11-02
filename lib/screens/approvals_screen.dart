@@ -1,6 +1,8 @@
+import '../services/app_preferences.dart';
 import 'package:flutter/material.dart';
 
 import '../models/flat_models.dart';
+import 'expense_details_screen.dart';
 import '../state/app_state.dart';
 import '../widgets/flait_widgets.dart';
 
@@ -10,10 +12,11 @@ class ApprovalsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pending =
-        state.expenses.where((e) => e.status == ExpenseStatus.pending).toList();
+    final pending = state.expenses
+        .where((e) => e.status == ExpenseStatus.pending && !e.cancelled)
+        .toList();
     final approved = state.expenses
-        .where((e) => e.status == ExpenseStatus.approved)
+        .where((e) => e.status == ExpenseStatus.approved && !e.cancelled)
         .toList();
     final canPay = state.currentMember.role == MemberRole.treasurer ||
         state.currentMember.role == MemberRole.admin;
@@ -28,7 +31,7 @@ class ApprovalsScreen extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.all(24),
             child: Center(
-              child: Text('No requests are waiting for a decision.'),
+              child: AppText('No requests are waiting for a decision.'),
             ),
           )
         else
@@ -52,7 +55,7 @@ class ApprovalsScreen extends StatelessWidget {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
+                                    AppText(
                                       expense.title,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w800,
@@ -60,7 +63,7 @@ class ApprovalsScreen extends StatelessWidget {
                                       ),
                                     ),
                                     const SizedBox(height: 4),
-                                    Text(
+                                    AppText(
                                       '${state.memberName(expense.requesterId)} · ${expense.category} · ${expenseDate(expense.createdAt)}',
                                       style: const TextStyle(
                                         color: Colors.blueGrey,
@@ -69,7 +72,7 @@ class ApprovalsScreen extends StatelessWidget {
                                   ],
                                 ),
                               ),
-                              Text(
+                              AppText(
                                 money(expense.amount, currency: state.currency),
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w800,
@@ -78,13 +81,22 @@ class ApprovalsScreen extends StatelessWidget {
                               ),
                             ],
                           ),
+                          TextButton.icon(
+                              onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute<void>(
+                                      builder: (_) => ExpenseDetailsScreen(
+                                          state: state, id: expense.id))),
+                              icon: const Icon(Icons.history),
+                              label: const AppText(
+                                  'Details, shares & corrections')),
                           if (expense.description.isNotEmpty)
                             Padding(
                               padding: const EdgeInsets.only(top: 12),
-                              child: Text(expense.description),
+                              child: AppText(expense.description),
                             ),
                           const SizedBox(height: 14),
-                          Text(
+                          AppText(
                             '${expense.votes.length} of ${state.members.where((m) => m.active && m.id != expense.requesterId).length} eligible votes recorded',
                             style: const TextStyle(
                               color: Colors.blueGrey,
@@ -93,7 +105,7 @@ class ApprovalsScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 12),
                           if (expense.requesterId == state.currentMemberId)
-                            const Text(
+                            const AppText(
                               'You submitted this request and cannot vote on it.',
                               style: TextStyle(color: Colors.deepOrange),
                             )
@@ -101,7 +113,7 @@ class ApprovalsScreen extends StatelessWidget {
                               expense.votes.any(
                                 (v) => v.memberId == state.currentMemberId,
                               ))
-                            const Text(
+                            const AppText(
                               'Your vote is saved. Sync with the owner to share local votes.',
                               style: TextStyle(color: Colors.green),
                             )
@@ -114,13 +126,13 @@ class ApprovalsScreen extends StatelessWidget {
                                   onPressed: () =>
                                       _vote(context, expense.id, false),
                                   icon: const Icon(Icons.close),
-                                  label: const Text('Reject'),
+                                  label: const AppText('Reject'),
                                 ),
                                 FilledButton.icon(
                                   onPressed: () =>
                                       _vote(context, expense.id, true),
                                   icon: const Icon(Icons.check),
-                                  label: const Text('Approve'),
+                                  label: const AppText('Approve'),
                                 ),
                               ],
                             ),
@@ -142,7 +154,7 @@ class ApprovalsScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: Text(
+                                      child: AppText(
                                         '${state.memberName(vote.memberId)}: ${vote.approved ? 'Approved' : 'Rejected'}',
                                       ),
                                     ),
@@ -172,11 +184,11 @@ class ApprovalsScreen extends StatelessWidget {
                       leading: const CircleAvatar(
                         child: Icon(Icons.payments_outlined),
                       ),
-                      title: Text(
+                      title: AppText(
                         expense.title,
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
-                      subtitle: Text(
+                      subtitle: AppText(
                         '${state.memberName(expense.requesterId)} · approved, unpaid · ${expenseDate(expense.createdAt)}',
                       ),
                       trailing: canPay
@@ -184,11 +196,11 @@ class ApprovalsScreen extends StatelessWidget {
                               onPressed: state.paymentQueued(expense.id)
                                   ? null
                                   : () => _pay(context, expense.id),
-                              child: Text(state.paymentQueued(expense.id)
+                              child: AppText(state.paymentQueued(expense.id)
                                   ? 'Queued for owner'
                                   : 'Record payment'),
                             )
-                          : Text(
+                          : AppText(
                               money(expense.amount, currency: state.currency),
                               style: const TextStyle(
                                 fontWeight: FontWeight.w800,
@@ -205,7 +217,7 @@ class ApprovalsScreen extends StatelessWidget {
           child: Card(
             child: Padding(
               padding: EdgeInsets.all(16),
-              child: Text(
+              child: AppText(
                 'Default policy: a strict majority of eligible flatmates must approve or reject. The requester cannot vote on their own claim. Approval does not change the pool balance until the treasurer records payment. The owner device validates and signs the shared journal. Queued votes and payments are finalized when synced with the owner.',
               ),
             ),
@@ -226,12 +238,12 @@ class ApprovalsScreen extends StatelessWidget {
               ? 'Request rejected.'
               : 'Your vote is saved. Sync with the owner to share local votes.';
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+          .showSnackBar(SnackBar(content: AppText(message)));
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+          content: AppText(error.toString().replaceFirst('Bad state: ', '')),
         ),
       );
     }
@@ -243,7 +255,7 @@ class ApprovalsScreen extends StatelessWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(state.isOwner
+          content: AppText(state.isOwner
               ? 'Payment recorded and pool balance updated.'
               : 'Payment queued locally. Sync with the owner to finalize it.'),
         ),
@@ -252,7 +264,7 @@ class ApprovalsScreen extends StatelessWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+          content: AppText(error.toString().replaceFirst('Bad state: ', '')),
         ),
       );
     }

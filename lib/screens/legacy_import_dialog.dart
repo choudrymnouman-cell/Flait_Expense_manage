@@ -1,3 +1,4 @@
+import '../services/app_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../state/app_state.dart';
@@ -95,12 +96,12 @@ class _LegacyImportState extends State<_LegacyImport> {
   Widget build(BuildContext context) => PopScope(
       canPop: !busy,
       child: AlertDialog(
-        title: const Text('Import previous cloud records'),
+        title: const AppText('Import previous cloud records'),
         content: SizedBox(
             width: 440,
             child: SingleChildScrollView(
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Text(
+              const AppText(
                   'Optional, one-time online import using your OLD Flait account. This downloads the flat you administer to this device. It does not upload local expenses or delete the source. Old history stays a read-only archive.'),
               const SizedBox(height: 12),
               TextField(
@@ -118,15 +119,15 @@ class _LegacyImportState extends State<_LegacyImport> {
               if (message != null)
                 Padding(
                     padding: const EdgeInsets.only(top: 12),
-                    child: Text(message!)),
+                    child: AppText(message!)),
             ]))),
         actions: [
           TextButton(
               onPressed: busy ? null : () => Navigator.pop(context),
-              child: const Text('Close')),
+              child: const AppText('Close')),
           FilledButton(
               onPressed: busy ? null : import,
-              child: Text(busy ? 'Importing…' : 'Download to this device'))
+              child: AppText(busy ? 'Importing…' : 'Download to this device'))
         ],
       ));
 }

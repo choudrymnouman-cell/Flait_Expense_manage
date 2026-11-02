@@ -1,4 +1,6 @@
+import '../services/app_preferences.dart';
 import 'package:flutter/material.dart';
+import '../widgets/pro_tools.dart';
 
 import '../models/flat_models.dart';
 import '../state/app_state.dart';
@@ -37,9 +39,10 @@ class DashboardScreen extends StatelessWidget {
           trailing: FilledButton.icon(
             onPressed: onAddExpense,
             icon: const Icon(Icons.add),
-            label: const Text('Add expense'),
+            label: const AppText('Add expense'),
           ),
         ),
+        ProTools(state: state),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 22),
           child: Wrap(
@@ -92,18 +95,18 @@ class DashboardScreen extends StatelessWidget {
                 for (var i = 0; i < state.members.length; i++) ...[
                   ListTile(
                     leading: CircleAvatar(
-                      child: Text(state.members[i].name.substring(0, 1)),
+                      child: AppText(state.members[i].name.substring(0, 1)),
                     ),
-                    title: Text(
+                    title: AppText(
                       state.members[i].name,
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
-                    subtitle: Text(switch (state.members[i].role) {
+                    subtitle: AppText(switch (state.members[i].role) {
                       MemberRole.treasurer => 'Treasurer',
                       MemberRole.admin => 'Flat admin',
                       MemberRole.member => 'Flatmate',
                     }),
-                    trailing: Text(
+                    trailing: AppText(
                       money(
                         balances[state.members[i].id] ?? 0,
                         currency: state.currency,
@@ -122,7 +125,7 @@ class DashboardScreen extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(22, 28, 22, 12),
           child: SectionTitle(
             'Recent requests',
-            trailing: Text('${state.expenses.length} total'),
+            trailing: AppText('${state.expenses.length} total'),
           ),
         ),
         Padding(
@@ -139,18 +142,18 @@ class DashboardScreen extends StatelessWidget {
                         color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
-                    title: Text(
+                    title: AppText(
                       expense.title,
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
-                    subtitle: Text(
+                    subtitle: AppText(
                       '${state.memberName(expense.requesterId)} · ${expense.category} · ${expenseDate(expense.createdAt)}',
                     ),
                     trailing: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(
+                        AppText(
                           money(expense.amount, currency: state.currency),
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
@@ -165,7 +168,7 @@ class DashboardScreen extends StatelessWidget {
         ),
         const Padding(
           padding: EdgeInsets.fromLTRB(22, 18, 22, 0),
-          child: Text(
+          child: AppText(
             'Amounts show contributions minus reimbursements received, not who owes whom. Shared costs are not allocated. Legacy contributions without a known contributor are excluded; pool totals still include them.',
             style: TextStyle(color: Colors.blueGrey, fontSize: 12),
           ),

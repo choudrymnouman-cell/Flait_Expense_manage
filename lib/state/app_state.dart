@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../models/flat_models.dart';
 import '../services/accounting_service.dart';
 import '../offline/local_database.dart';
 import '../offline/secure_book.dart';
+import '../services/settlement_service.dart';
 
 class FlaitState extends ChangeNotifier {
   FlaitState(this.storage);
@@ -16,6 +18,16 @@ class FlaitState extends ChangeNotifier {
   bool loading = true, _disposed = false;
   String? loadError;
   String? lastSync;
+  Map<String, dynamic> preferences = {};
+  Map<String, dynamic> localReceipts = {};
+  final settlement = SettlementService();
+  Map<String, int> get dues => settlement.balances(
+      view?.expenses.values ?? [], view?.ledger ?? [], view?.settlements ?? []);
+  bool get backupDue {
+    final at = DateTime.tryParse(preferences['backupAt'] as String? ?? '');
+    return at == null || DateTime.now().difference(at).inDays >= 7;
+  }
+
   Future<void> _tail = Future.value();
   String get flatId => book?.id ?? '';
   String get flatName => view?.name ?? 'My flat';
@@ -46,7 +58,11 @@ class FlaitState extends ChangeNotifier {
             category: d['category'] as String,
             amount: (d['cents'] as int) / 100,
             requesterId: b['author'] as String,
-            createdAt: DateTime.parse(b['at'] as String));
+            createdAt: DateTime.parse(b['at'] as String),
+            shares:
+                asMap(d['shares'] ?? {}).map((k, v) => MapEntry(k, v as int)),
+            receiptReference: d['receipt'] as String?,
+            recurringKey: d['recurringKey'] as String?);
       }
     }
     // Votes remain visibly queued; only owner-confirmed votes affect status.
@@ -73,6 +89,8 @@ class FlaitState extends ChangeNotifier {
         'book': next?.toJson(),
         'proposals': queue,
         'lastSync': lastSync,
+        'preferences': preferences,
+        'localReceipts': localReceipts,
       };
   Future<T> serial<T>(Future<T> Function() action) {
     final result = _tail.then((_) => action());
@@ -82,6 +100,10 @@ class FlaitState extends ChangeNotifier {
 
   Future<void> _save(DeviceIdentity? who, SecureBook? next,
       List<Map<String, dynamic>> queue) async {
+    if (utf8.encode(canonical(queue)).length > 1500000) {
+      throw StateError(
+          'Queued data reached 1.5 MB. Sync with the owner before adding more shared receipts.');
+    }
     final nextView = next == null ? null : await next.verify();
     await storage.write(_document(who, next, queue), revision);
     identity = who;
@@ -130,6 +152,8 @@ class FlaitState extends ChangeNotifier {
             }
             revision = data['revision'] as int;
             lastSync = data['lastSync'] as String?;
+            preferences = asMap(data['preferences'] ?? {});
+            localReceipts = asMap(data['localReceipts'] ?? {});
           }
         } catch (e) {
           loadError = e.toString();
@@ -205,19 +229,35 @@ class FlaitState extends ChangeNotifier {
           {required String title,
           required String description,
           required String category,
-          required double amount}) =>
-      operation('expense', {
-        'title': title.trim(),
-        'description': description.trim(),
-        'category': category,
-        'cents': _cents(amount)
-      });
+          required double amount,
+          Map<String, int>? shares,
+          String? receipt,
+          String? recurringKey,
+          String? requestId}) =>
+      operation(
+          'expense',
+          {
+            'title': title.trim(),
+            'description': description.trim(),
+            'category': category,
+            'cents': _cents(amount),
+            'shares': shares ??
+                allocateShares(_cents(amount),
+                    {for (final m in members.where((m) => m.active)) m.id: 1}),
+            if (receipt != null) 'receipt': validateReceipt(receipt),
+            if (recurringKey != null) 'recurringKey': recurringKey,
+          },
+          operationId: requestId);
   Future<void> vote(String id, bool approve, {String comment = ''}) async {
     if (voteQueued(id)) {
       throw StateError(
           'Your vote is already saved locally. Sync with the owner.');
     }
-    await operation('vote', {'expense': id, 'approve': approve});
+    await operation('vote', {
+      'expense': id,
+      'approve': approve,
+      'revision': view!.expenses[id]!.revision
+    });
   }
 
   Future<void> recordContribution(double amount, String description,
@@ -247,6 +287,94 @@ class FlaitState extends ChangeNotifier {
   Future<void> addMember(String id, String name) async {
     if (view!.members.containsKey(id)) return;
     await operation('member', {'id': id, 'name': name});
+  }
+
+  Future<void> setPreference(String key, dynamic value) => serial(() async {
+        final old = preferences;
+        preferences = {...preferences, key: value};
+        try {
+          await _save(identity, book, proposals);
+        } catch (_) {
+          preferences = old;
+          rethrow;
+        }
+      });
+  Future<void> markBackup() =>
+      setPreference('backupAt', DateTime.now().toUtc().toIso8601String());
+  Future<void> saveLocalReceipt(String id, String encoded) => serial(() async {
+        validateReceipt(encoded);
+        final old = localReceipts;
+        localReceipts = {...localReceipts, id: encoded};
+        if (utf8.encode(canonical(localReceipts)).length > 5000000) {
+          localReceipts = old;
+          throw StateError(
+              'Local receipts reached 5 MB. Keep further receipts outside the app.');
+        }
+        try {
+          await _save(identity, book, proposals);
+        } catch (_) {
+          localReceipts = old;
+          rethrow;
+        }
+      });
+  Future<void> requestLeave() => operation('leave_request', {});
+  Future<void> setMemberActive(String id, bool active) =>
+      operation('member_active', {'id': id, 'active': active});
+  Future<void> offerOwnership(String id) =>
+      operation('transfer_offer', {'to': id});
+  Future<void> acceptOwnership() =>
+      operation('transfer_accept', {'offer': view!.transferOffer});
+  Future<void> cancelTransfer() => operation('transfer_cancel', {});
+  Future<void> recordSettlement(String from, String to, double amount) =>
+      operation(
+          'settlement', {'from': from, 'to': to, 'cents': _cents(amount)});
+  Future<void> cancelExpense(String id, String reason) =>
+      operation('cancel', {'expense': id, 'reason': reason});
+  Future<void> amendExpense(ExpenseRequest expense,
+          {required String title,
+          required String description,
+          required String category,
+          required double amount,
+          required Map<String, int> shares,
+          required String reason}) =>
+      operation('amend', {
+        'expense': expense.id,
+        'revision': expense.revision,
+        'title': title.trim(),
+        'description': description.trim(),
+        'category': category,
+        'cents': _cents(amount),
+        'shares': shares,
+        'reason': reason,
+        'receipt': expense.receiptReference
+      });
+  Future<void> saveRecurring(Map<String, dynamic> template) async {
+    final rows = asMaps(preferences['recurring'] ?? []);
+    rows.removeWhere((r) => r['id'] == template['id']);
+    rows.add(template);
+    await setPreference('recurring', rows);
+  }
+
+  Future<void> removeRecurring(String id) => setPreference(
+      'recurring',
+      asMaps(preferences['recurring'] ?? [])
+          .where((r) => r['id'] != id)
+          .toList());
+  Future<void> submitRecurring(
+      Map<String, dynamic> bill, DateTime month) async {
+    final period = '${month.year}-${month.month.toString().padLeft(2, '0')}';
+    final key = '${currentMemberId.substring(0, 12)}:${bill['id']}:$period';
+    if (view!.recurringKeys.contains(key) ||
+        proposals.any(
+            (p) => asMap(asMap(p['body'])['data'])['recurringKey'] == key)) {
+      throw StateError('This month is already saved.');
+    }
+    await submitExpense(
+        title: '${bill['title']} ($period)',
+        description: 'Recurring bill',
+        category: bill['category'] as String,
+        amount: (bill['cents'] as int) / 100,
+        recurringKey: key);
   }
 
   Map<String, dynamic> sharedPacket() =>
@@ -291,9 +419,11 @@ class FlaitState extends ChangeNotifier {
         });
         if (next.owner == currentMemberId) {
           for (final draft in queue) {
+            if (next.owner != currentMemberId) break;
             next = await next.append(identity!, draft, keepRejection: true);
           }
-          queue.clear();
+          queue.removeWhere(
+              (p) => nextView.processed.contains(asMap(p['body'])['id']));
         }
         nextView = await next.verify();
         await _save(
@@ -333,7 +463,19 @@ class FlaitState extends ChangeNotifier {
             }
           }
         }
-        await _save(who, next, queue);
+        final oldPreferences = preferences, oldReceipts = localReceipts;
+        preferences = asMap(data['preferences'] ?? {})
+          ..remove('pin')
+          ..remove('pinAttempts')
+          ..remove('biometric');
+        localReceipts = asMap(data['localReceipts'] ?? {});
+        try {
+          await _save(who, next, queue);
+        } catch (_) {
+          preferences = oldPreferences;
+          localReceipts = oldReceipts;
+          rethrow;
+        }
       });
   Future<void> markSynced() => serial(() async {
         lastSync = DateTime.now().toUtc().toIso8601String();

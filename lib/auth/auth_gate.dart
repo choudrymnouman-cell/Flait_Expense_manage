@@ -1,3 +1,5 @@
+import '../screens/guide_screen.dart';
+import '../services/app_preferences.dart';
 import '../widgets/flait_logo.dart';
 import 'package:flutter/material.dart';
 import '../state/app_state.dart';
@@ -65,12 +67,20 @@ class _OfflineSetupScreenState extends State<OfflineSetupScreen> {
                             children: [
                               const FlaitLogo(size: 52),
                               const SizedBox(height: 12),
-                              const Text('Flait',
+                              TextButton.icon(
+                                  onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute<void>(
+                                          builder: (_) => const GuideScreen())),
+                                  icon: const Icon(Icons.help_outline),
+                                  label: AppText(tr(context, 'How Flait works',
+                                      'فلیٹ کیسے کام کرتا ہے؟'))),
+                              const AppText('Flait',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                       fontSize: 32,
                                       fontWeight: FontWeight.w900)),
-                              const Text(
+                              const AppText(
                                   'Your flat. Your devices. Works offline.',
                                   textAlign: TextAlign.center),
                               const SizedBox(height: 24),
@@ -89,28 +99,28 @@ class _OfflineSetupScreenState extends State<OfflineSetupScreen> {
                               if (error != null)
                                 Padding(
                                     padding: const EdgeInsets.only(top: 12),
-                                    child: Text(error!,
+                                    child: AppText(error!,
                                         style: const TextStyle(
                                             color: Colors.red))),
                               const SizedBox(height: 20),
                               FilledButton(
                                   onPressed: busy ? null : () => proceed(true),
-                                  child:
-                                      const Text('Create flat on this device')),
+                                  child: const AppText(
+                                      'Create flat on this device')),
                               const SizedBox(height: 12),
                               OutlinedButton(
                                   onPressed: busy ? null : () => proceed(false),
-                                  child: const Text(
+                                  child: const AppText(
                                       'Join a flat using an internet sync code')),
                               TextButton(
                                   onPressed: busy
                                       ? null
                                       : () => showBackupDialog(
                                           context, widget.state, restore: true),
-                                  child:
-                                      const Text('Restore encrypted backup')),
+                                  child: const AppText(
+                                      'Restore encrypted backup')),
                               const SizedBox(height: 12),
-                              const Text(
+                              const AppText(
                                   'No email or cloud account required. Creating a flat works offline. To join, both devices must be online. Save a backup: clearing app/browser storage removes your local copy.',
                                   style: TextStyle(
                                       fontSize: 12, color: Colors.blueGrey)),

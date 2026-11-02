@@ -225,6 +225,9 @@ class SyncSession extends ChangeNotifier {
     final b = asMap(signed['body']);
     if (b['sid'] == sid) return;
     final author = b['author'] as String;
+    if (state.view?.members[author]?.active == false) {
+      throw StateError('This device access has been revoked.');
+    }
     if (trustedPeerId != null && author != trustedPeerId) return;
     if (!await signedBy(signed, author)) {
       throw const FormatException('Invalid device signature.');

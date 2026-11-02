@@ -80,6 +80,7 @@ class AutoSync extends ChangeNotifier {
   final Map<String, _Route> _routes = {};
   bool _active = true, _closed = false;
   String status = 'Automatic sync ready';
+  final Map<String, DateTime> peerSeen = {};
   void setActive(bool active) {
     _active = active;
     _changed();
@@ -95,14 +96,15 @@ class AutoSync extends ChangeNotifier {
   void _changed() {
     if (_closed) return;
     final id = state.identity, view = state.view;
-    final peers = !_active || id == null || view == null
+    final peers = !_active ||
+            id == null ||
+            view == null ||
+            view.members[id.publicId]?.active != true
         ? <String>{}
-        : (state.isOwner
-            ? view.members.values
-                .where((m) => m.active && m.id != id.publicId)
-                .map((m) => m.id)
-                .toSet()
-            : {view.owner});
+        : view.members.values
+            .where((m) => m.active && m.id != id.publicId)
+            .map((m) => m.id)
+            .toSet();
     for (final peer in _routes.keys.toList()) {
       if (!peers.contains(peer)) {
         _routes.remove(peer)!.close();
@@ -210,6 +212,7 @@ class _Route {
       final code = await handshake!.accept(message);
       if (closed) return;
       final b = asMap(message['body']);
+      auto.peerSeen[peer] = DateTime.now();
       final token = '$tag:${b['sid']}:${b['change']}';
       if (busy || synced == token) return;
       busy = true;
@@ -222,7 +225,9 @@ class _Route {
 
   Future<void> _exchange(String code, String token) async {
     final sync = SyncSession(state,
-        host: state.isOwner, connectionCode: code, trustedPeerId: peer);
+        host: state.currentMemberId.compareTo(peer) < 0,
+        connectionCode: code,
+        trustedPeerId: peer);
     session = sync;
     try {
       auto.report('Syncing automatically…');
@@ -233,6 +238,10 @@ class _Route {
       }
       if (!closed && sync.completed) {
         synced = token;
+        await state.setPreference('peerSync', {
+          ...asMap(state.preferences['peerSync'] ?? {}),
+          peer: DateTime.now().toUtc().toIso8601String()
+        });
         auto.report('Synced automatically · saved on this device');
       } else if (!closed) {
         auto.report('Waiting for flatmate · automatic retry enabled');

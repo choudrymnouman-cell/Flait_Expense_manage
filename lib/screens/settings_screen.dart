@@ -1,3 +1,4 @@
+import '../services/app_preferences.dart';
 import 'package:flutter/material.dart';
 import '../models/flat_models.dart';
 import '../offline/secure_book.dart';
@@ -5,11 +6,13 @@ import '../state/app_state.dart';
 import '../widgets/flait_widgets.dart';
 import 'backup_dialog.dart';
 import 'sync_screen.dart';
-import 'legacy_import_dialog.dart';
+import '../widgets/pro_tools.dart';
+import '../offline/auto_sync.dart';
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key, required this.state});
+  const SettingsScreen({super.key, required this.state, this.auto});
   final FlaitState state;
+  final AutoSync? auto;
   Widget card(Widget child) => Padding(
       padding: const EdgeInsets.fromLTRB(22, 12, 22, 0),
       child: Card(
@@ -20,22 +23,23 @@ class SettingsScreen extends StatelessWidget {
         const PageHeading(
             title: 'Settings',
             subtitle: 'Local identity, sharing and backups.'),
+        ProTools(state: state, auto: auto),
         card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(state.currentMember.name,
+          AppText(state.currentMember.name,
               style:
                   const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-          Text(
+          AppText(
               '${state.flatName} · ${state.currency} · ${state.isOwner ? 'Flat owner' : state.currentMember.role.name}'),
           const SizedBox(height: 10),
           SelectableText('Device: ${state.currentMemberId.substring(0, 12)}…'),
-          const Text(
+          const AppText(
               'This identity lives on this device. No email login is needed. Use only one active device for the owner identity.'),
         ])),
         card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Internet sharing & members',
+          const AppText('Internet sharing & members',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 10),
-          const Text(
+          const AppText(
               'To add a member, the owner creates a sync code. The flatmate enters it on their device; the owner then confirms admission. Both stay online until Sync complete. After pairing, automatic sync reconnects without codes when both apps are open online. The owner must be online to confirm changes.'),
           const SizedBox(height: 12),
           FilledButton.icon(
@@ -44,18 +48,18 @@ class SettingsScreen extends StatelessWidget {
                   MaterialPageRoute<void>(
                       builder: (_) => SyncScreen(state: state))),
               icon: const Icon(Icons.sync),
-              label: const Text('Open internet sync')),
-          Text(
+              label: const AppText('Open internet sync')),
+          AppText(
               '${state.queuedCount} changes waiting for owner confirmation. Last completed exchange: ${state.lastSync ?? 'never'}'),
         ])),
         card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Flatmates',
+          const AppText('Flatmates',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           for (final member in state.members)
             ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(member.name),
-                subtitle: Text(member.id == state.book!.owner
+                title: AppText(member.name),
+                subtitle: AppText(member.id == state.book!.owner
                     ? 'Owner · finalizes shared records'
                     : member.role.name),
                 trailing: state.isOwner && member.id != state.currentMemberId
@@ -63,10 +67,11 @@ class SettingsScreen extends StatelessWidget {
                         value: member.role,
                         items: const [
                           DropdownMenuItem(
-                              value: MemberRole.member, child: Text('Member')),
+                              value: MemberRole.member,
+                              child: AppText('Member')),
                           DropdownMenuItem(
                               value: MemberRole.treasurer,
-                              child: Text('Treasurer'))
+                              child: AppText('Treasurer'))
                         ],
                         onChanged: (role) async {
                           if (role == null) return;
@@ -74,76 +79,66 @@ class SettingsScreen extends StatelessWidget {
                             await state.setMemberRole(member.id, role);
                           } catch (e) {
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context)
-                                  .showSnackBar(SnackBar(content: Text('$e')));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: AppText('$e')));
                             }
                           }
                         })
                     : null),
-          const Text(
+          const AppText(
               'Treasurers can queue money entries offline. The owner validates them before they change the confirmed shared balance.'),
         ])),
         card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Device backup',
+          const AppText('Device backup',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 10),
-          const Text(
+          const AppText(
               'Keep a password-encrypted backup outside this device. Uninstalling the app or clearing browser storage can erase the local copy. Local app storage itself relies on your device/browser protection.'),
           const SizedBox(height: 12),
           OutlinedButton.icon(
               onPressed: () => showBackupDialog(context, state),
               icon: const Icon(Icons.save_alt),
-              label: const Text('Export encrypted backup')),
+              label: const AppText('Export encrypted backup')),
         ])),
         if (state.proposals.isNotEmpty)
           card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Waiting for owner confirmation',
+            const AppText('Waiting for owner confirmation',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             for (final p in state.proposals)
               ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(
+                  title: AppText(
                       '${asMap(p['body'])['kind']} · ${state.memberName(asMap(p['body'])['author'] as String)}'),
-                  subtitle: Text(
+                  subtitle: AppText(
                       '${asMap(asMap(p['body'])['data'])['title'] ?? asMap(asMap(p['body'])['data'])['description'] ?? 'Saved locally; not yet confirmed'}')),
-          ])),
-        if (state.isOwner && state.view!.legacyArchive.isEmpty)
-          card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Previous online version',
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            const Text(
-                'Your old cloud data is separate. Import it before requesting cloud deletion.'),
-            TextButton(
-                onPressed: () => showLegacyImport(context, state),
-                child: const Text('Import previous cloud records')),
           ])),
         if (state.view!.legacyArchive.isNotEmpty)
           card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Imported cloud archive · read-only',
+            const AppText('Imported cloud archive · read-only',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             for (final row in state.view!.legacyArchive.where((r) =>
                 ['expenses', 'ledger_entries'].contains(r['table']))) ...[
               const Divider(),
-              Text(
+              AppText(
                   '${row['table']}: ${asMap(row['record'])['title'] ?? asMap(row['record'])['description'] ?? ''}'),
-              Text(
+              AppText(
                   '${asMap(row['record'])['amount'] ?? ''} · ${asMap(row['record'])['status'] ?? asMap(row['record'])['entry_type'] ?? ''}'),
             ],
           ])),
         if (state.view!.rejected.isNotEmpty)
           card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Owner review results',
+            const AppText('Owner review results',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             for (final entry in state.view!.rejected.entries)
-              Text('${entry.key.substring(0, 8)}: ${entry.value}'),
+              AppText('${entry.key.substring(0, 8)}: ${entry.value}'),
           ])),
         card(const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Privacy',
+              AppText('Privacy',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               SizedBox(height: 10),
-              Text(
+              AppText(
                   'Expense records stay on your devices. Known flatmates reconnect automatically while the app is open; old cloud records are downloaded only when you explicitly import them. Live sharing uses encrypted client broadcasts without database storage or replay. The relay can still see connection metadata. This hosted web page also has its existing ChatGPT access gate.'),
             ])),
       ]);

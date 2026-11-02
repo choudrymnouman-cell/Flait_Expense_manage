@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:cryptography/cryptography.dart';
 import 'package:uuid/uuid.dart';
 import '../models/flat_models.dart';
+import '../services/settlement_service.dart';
 
 // Versioned canonical encoding: signed maps are sorted recursively.
 dynamic canonicalValue(dynamic value) {
@@ -70,7 +71,13 @@ class BookView {
     members[owner] =
         FlatMember(id: owner, name: ownerName, role: MemberRole.admin);
   }
-  final String owner, groupId, name, currency;
+  String owner;
+  final String groupId, name, currency;
+  String? transferOffer, transferTo;
+  final List<SettlementPayment> settlements = [];
+  final Map<String, List<Map<String, dynamic>>> history = {};
+  final Set<String> recurringKeys = {};
+  final Set<String> leaveRequests = {};
   final Map<String, FlatMember> members = {};
   final Map<String, ExpenseRequest> expenses = {};
   final List<LedgerEntry> ledger = [];
@@ -80,8 +87,9 @@ class BookView {
   int get balanceCents =>
       ledger.fold(0, (sum, e) => sum + (e.poolDelta * 100).round());
   bool manager(String id) =>
-      members[id]?.role == MemberRole.admin ||
-      members[id]?.role == MemberRole.treasurer;
+      members[id]?.active == true &&
+      (members[id]?.role == MemberRole.admin ||
+          members[id]?.role == MemberRole.treasurer);
   int cents(dynamic value) {
     if (value is! int || value <= 0 || value > 999999999999) {
       throw StateError('Invalid amount.');
@@ -96,6 +104,21 @@ class BookView {
     return value.trim();
   }
 
+  Map<String, int> allocation(Map<String, dynamic> data, int total) {
+    if (data['shares'] == null) return {}; // preserve pre-split histories
+    final raw = asMap(data['shares']);
+    if (raw.isEmpty ||
+        raw.keys.any((k) => members[k]?.active != true) ||
+        raw.values.any((v) => v is! int || v < 0)) {
+      throw StateError('Invalid expense shares.');
+    }
+    final result = raw.map((k, v) => MapEntry(k, v as int));
+    if (result.values.fold(0, (a, b) => a + b) != total) {
+      throw StateError('Shares must equal the full amount.');
+    }
+    return result;
+  }
+
   // Only the owner's signed linear journal changes shared money. Member
   // operations remain proposals until the owner commits them, preventing
   // independent offline treasurers from spending the same balance.
@@ -103,7 +126,9 @@ class BookView {
     final b = asMap(proposal['body']);
     final actor = b['author'] as String;
     final id = b['id'] as String;
-    if (b['group'] != groupId || !members.containsKey(actor)) {
+    if (b['group'] != groupId ||
+        !members.containsKey(actor) ||
+        !members[actor]!.active) {
       throw StateError('Not a member of this flat.');
     }
     if (processed.contains(id)) throw StateError('Already processed.');
@@ -133,22 +158,175 @@ class BookView {
         members[m.id] = FlatMember(
             id: m.id,
             name: m.name,
+            active: m.active,
             role: data['role'] == 'treasurer'
                 ? MemberRole.treasurer
                 : MemberRole.member);
+      case 'leave_request':
+        if (actor == owner) {
+          throw StateError('Transfer ownership before leaving.');
+        }
+        leaveRequests.add(actor);
+      case 'member_active':
+        final m = members[data['id']];
+        if (actor != owner ||
+            m == null ||
+            m.id == owner ||
+            data['active'] is! bool) {
+          throw StateError('Only the owner can revoke/reactivate a member.');
+        }
+        if (data['active'] == false &&
+            expenses.values.any((e) =>
+                !e.cancelled &&
+                [ExpenseStatus.pending, ExpenseStatus.approved]
+                    .contains(e.status) &&
+                (e.requesterId == m.id || (e.shares[m.id] ?? 0) > 0))) {
+          throw StateError(
+              'Resolve pending/unpaid claims involving this member first.');
+        }
+        if (data['active'] == false &&
+            (SettlementService()
+                        .balances(expenses.values, ledger, settlements)[m.id] ??
+                    0) !=
+                0) {
+          throw StateError(
+              'Settle this member’s confirmed balance before removal.');
+        }
+        leaveRequests.remove(m.id);
+        members[m.id] = FlatMember(
+            id: m.id,
+            name: m.name,
+            role: m.role,
+            active: data['active'] as bool);
+      case 'transfer_offer':
+        if (actor != owner ||
+            data['to'] == owner ||
+            members[data['to']]?.active != true) {
+          throw StateError('Choose an active flatmate.');
+        }
+        transferOffer = id;
+        transferTo = data['to'] as String;
+      case 'transfer_cancel':
+        if (actor != owner) {
+          throw StateError('Only the owner can cancel transfer.');
+        }
+        transferOffer = null;
+        transferTo = null;
+      case 'transfer_accept':
+        if (actor != transferTo ||
+            data['offer'] != transferOffer ||
+            transferOffer == null) {
+          throw StateError('No matching owner transfer offer.');
+        }
+        final old = members[owner]!, next = members[actor]!;
+        members[old.id] =
+            FlatMember(id: old.id, name: old.name, role: MemberRole.member);
+        members[next.id] =
+            FlatMember(id: next.id, name: next.name, role: MemberRole.admin);
+        owner = actor;
+        transferOffer = null;
+        transferTo = null;
       case 'expense':
+        final recurring = data['recurringKey'] as String?;
+        if (recurring != null &&
+            (recurring.length > 120 || !recurringKeys.add(recurring))) {
+          throw StateError('This recurring bill is already recorded.');
+        }
+        final amount = cents(data['cents']);
+        final shares = allocation(data, amount);
+        final receipt = validateReceipt(data['receipt']);
         expenses[id] = ExpenseRequest(
             id: id,
             title: text(data['title'], 2, 120),
             description: text(data['description'], 0, 4000),
             category: text(data['category'], 1, 80),
-            amount: cents(data['cents']) / 100,
+            amount: amount / 100,
             requesterId: actor,
-            createdAt: at);
+            createdAt: at,
+            shares: shares,
+            receiptReference: receipt,
+            recurringKey: recurring);
+        history[id] = [
+          {
+            'at': b['at'],
+            'actor': actor,
+            'action': 'created',
+            'data': Map.of(data)
+          }
+        ];
+      case 'amend':
+        final e = expenses[data['expense']];
+        if (e == null ||
+            e.cancelled ||
+            e.status != ExpenseStatus.pending ||
+            e.requesterId != actor ||
+            data['revision'] != e.revision) {
+          throw StateError(
+              'Only the requester can correct a pending request at its current revision.');
+        }
+        final amount = cents(data['cents']);
+        final shares = allocation(data, amount);
+        final reason = text(data['reason'], 3, 300);
+        expenses[e.id] = e.copyWith(
+            title: text(data['title'], 2, 120),
+            description: text(data['description'], 0, 4000),
+            category: text(data['category'], 1, 80),
+            amount: amount / 100,
+            shares: shares,
+            votes: [],
+            revision: e.revision + 1,
+            receiptReference: validateReceipt(data['receipt']));
+        history[e.id]!.add({
+          'at': b['at'],
+          'actor': actor,
+          'action': 'corrected',
+          'reason': reason,
+          'data': Map.of(data)
+        });
+      case 'cancel':
+        final e = expenses[data['expense']];
+        if (e == null ||
+            e.cancelled ||
+            e.status == ExpenseStatus.paid ||
+            (actor != owner && actor != e.requesterId)) {
+          throw StateError('A paid or cancelled expense cannot be cancelled.');
+        }
+        expenses[e.id] = e.copyWith(
+            cancelled: true,
+            status: ExpenseStatus.rejected,
+            revision: e.revision + 1);
+        history[e.id]!.add({
+          'at': b['at'],
+          'actor': actor,
+          'action': 'cancelled',
+          'reason': text(data['reason'], 3, 300)
+        });
+      case 'settlement':
+        final from = data['from'] as String,
+            to = data['to'] as String,
+            n = cents(data['cents']);
+        if (!members.containsKey(from) ||
+            !members.containsKey(to) ||
+            from == to ||
+            ![owner, from, to].contains(actor)) {
+          throw StateError(
+              'Only the payer, recipient or owner can record this settlement.');
+        }
+        final net =
+            SettlementService().balances(expenses.values, ledger, settlements);
+        if ((net[from] ?? 0) >= 0 ||
+            (net[to] ?? 0) <= 0 ||
+            n > -(net[from] ?? 0) ||
+            n > (net[to] ?? 0)) {
+          throw StateError('Settlement exceeds current confirmed dues.');
+        }
+        settlements.add(SettlementPayment(from, to, n));
       case 'vote':
         final e = expenses[data['expense']];
         if (e == null ||
             e.status != ExpenseStatus.pending ||
+            e.cancelled ||
+            (data['revision'] ?? 0) != e.revision ||
             e.requesterId == actor ||
             e.votes.any((v) => v.memberId == actor) ||
             data['approve'] is! bool) {
@@ -160,7 +338,11 @@ class BookView {
           ExpenseVote(
               memberId: actor, approved: data['approve'] as bool, at: at)
         ];
-        final threshold = ((members.length - 1) ~/ 2) + 1;
+        final threshold = ((members.values
+                    .where((m) => m.active && m.id != e.requesterId)
+                    .length) ~/
+                2) +
+            1;
         final yes = votes.where((v) => v.approved).length,
             no = votes.where((v) => !v.approved).length;
         expenses[e.id] = e.copyWith(
@@ -171,7 +353,7 @@ class BookView {
                     ? ExpenseStatus.rejected
                     : ExpenseStatus.pending);
       case 'contribution':
-        if (!manager(actor) || !members.containsKey(data['member'])) {
+        if (!manager(actor) || members[data['member']]?.active != true) {
           throw StateError(
               'Only the owner or treasurer can record funds for a flatmate.');
         }
@@ -187,7 +369,7 @@ class BookView {
         final e = expenses[data['expense']];
         if (!manager(actor) ||
             e == null ||
-            e.status != ExpenseStatus.approved) {
+            (e.status != ExpenseStatus.approved || e.cancelled)) {
           throw StateError(
               'Only an approved unpaid request can be paid by a manager.');
         }
@@ -236,10 +418,22 @@ class SecureBook {
   final Map<String, dynamic> manifest;
   final List<Map<String, dynamic>> records;
   Map<String, dynamic> get details => asMap(manifest['body']);
-  String get owner => details['owner'] as String;
+  String get originOwner => details['owner'] as String;
+  String get owner {
+    var result = originOwner;
+    for (final r in records) {
+      final b = asMap(r['body']);
+      final d = asMap(asMap(b['draft'])['body']);
+      if (b['rejected'] != true && d['kind'] == 'transfer_accept') {
+        result = d['author'] as String;
+      }
+    }
+    return result;
+  }
+
   String get id => details['id'] as String;
   Map<String, dynamic> toJson() =>
-      {'version': 2, 'manifest': manifest, 'records': records};
+      {'version': 3, 'manifest': manifest, 'records': records};
   static Future<SecureBook> create(DeviceIdentity identity, String name,
       {String currency = 'PKR'}) async {
     final m = await identity.sign({
@@ -254,7 +448,7 @@ class SecureBook {
   }
 
   static Future<SecureBook> fromJson(Map<String, dynamic> json) async {
-    if (json['version'] != 2) {
+    if (![2, 3].contains(json['version'])) {
       throw const FormatException('Unsupported book version.');
     }
     final book = SecureBook(asMap(json['manifest']), asMaps(json['records']));
@@ -262,12 +456,12 @@ class SecureBook {
     return book;
   }
 
-  BookView emptyView() => BookView(owner, id, details['name'] as String,
+  BookView emptyView() => BookView(originOwner, id, details['name'] as String,
       details['currency'] as String, details['ownerName'] as String);
   Future<BookView> verify() async {
     if (records.length > 10000 ||
-        !await signedBy(manifest, owner) ||
-        base64Decode(owner).length != 32 ||
+        !await signedBy(manifest, originOwner) ||
+        base64Decode(originOwner).length != 32 ||
         (details['name'] as String).trim().isEmpty ||
         !RegExp(r'^[A-Z]{3}$').hasMatch(details['currency'] as String)) {
       throw const FormatException('Invalid flat identity.');
@@ -282,7 +476,7 @@ class SecureBook {
       if (body['seq'] != i ||
           body['previous'] != previous ||
           body['group'] != id ||
-          !await signedBy(record, owner) ||
+          !await signedBy(record, view.owner) ||
           proposal['group'] != id ||
           !await signedBy(draft, proposal['author'] as String) ||
           !view.members.containsKey(proposal['author']) ||
@@ -329,7 +523,12 @@ class SecureBook {
       'rejected': reason != null,
       'reason': reason ?? ''
     });
-    return SecureBook(manifest, [...records, record]);
+    final result = SecureBook(manifest, [...records, record]);
+    if (utf8.encode(canonical(result.toJson())).length > 6000000) {
+      throw StateError(
+          'Shared history reached the 6 MB live-sync limit. Export a backup and start a new accounting period.');
+    }
+    return result;
   }
 
   Future<SecureBook> merge(SecureBook incoming) async {
@@ -422,6 +621,40 @@ void validateDraftShape(Map<String, dynamic> draft) {
           d['cents'] is! int) {
         throw const FormatException('Malformed expense.');
       }
+    case 'amend':
+      if (d['expense'] is! String ||
+          d['revision'] is! int ||
+          d['title'] is! String ||
+          d['description'] is! String ||
+          d['category'] is! String ||
+          d['cents'] is! int ||
+          d['reason'] is! String) {
+        throw const FormatException('Malformed correction.');
+      }
+    case 'cancel':
+      if (d['expense'] is! String || d['reason'] is! String) {
+        throw const FormatException('Malformed cancellation.');
+      }
+    case 'leave_request':
+      break;
+    case 'member_active':
+      if (d['id'] is! String || d['active'] is! bool) {
+        throw const FormatException('Malformed membership change.');
+      }
+    case 'transfer_offer':
+      if (d['to'] is! String) {
+        throw const FormatException('Malformed transfer.');
+      }
+    case 'transfer_accept':
+      if (d['offer'] is! String) {
+        throw const FormatException('Malformed transfer acceptance.');
+      }
+    case 'transfer_cancel':
+      break;
+    case 'settlement':
+      if (d['from'] is! String || d['to'] is! String || d['cents'] is! int) {
+        throw const FormatException('Malformed settlement.');
+      }
     case 'vote':
       if (d['expense'] is! String || d['approve'] is! bool) {
         throw const FormatException('Malformed vote.');
@@ -451,4 +684,58 @@ void validateDraftShape(Map<String, dynamic> draft) {
     default:
       throw const FormatException('Unknown operation.');
   }
+}
+
+String? validateReceipt(dynamic value) {
+  if (value == null) return null;
+  if (value is! String || value.length > 700000) {
+    throw StateError('Receipt exceeds 500 KB.');
+  }
+  final bytes = base64Decode(value);
+  if (bytes.length > 500000 || bytes.length < 24) {
+    throw StateError('Choose a JPEG or PNG photo below 500 KB.');
+  }
+  int width = 0, height = 0;
+  if (bytes[0] == 137 && bytes[1] == 80 && bytes[2] == 78 && bytes[3] == 71) {
+    int u32(int p) =>
+        (bytes[p] << 24) |
+        (bytes[p + 1] << 16) |
+        (bytes[p + 2] << 8) |
+        bytes[p + 3];
+    width = u32(16);
+    height = u32(20);
+  } else if (bytes[0] == 255 && bytes[1] == 216) {
+    var p = 2;
+    while (p + 4 < bytes.length) {
+      if (bytes[p++] != 255) continue;
+      while (p < bytes.length && bytes[p] == 255) {
+        p++;
+      }
+      if (p >= bytes.length) break;
+      final marker = bytes[p++];
+      if (marker == 217 || marker == 218) break;
+      if (marker == 0 || marker == 1 || (marker >= 208 && marker <= 215)) {
+        continue;
+      }
+      if (p + 1 >= bytes.length) break;
+      final length = (bytes[p] << 8) | bytes[p + 1];
+      if (length < 2 || p + length > bytes.length) break;
+      if ([192, 193, 194, 195, 197, 198, 199, 201, 202, 203, 205, 206, 207]
+              .contains(marker) &&
+          length >= 7) {
+        height = (bytes[p + 3] << 8) | bytes[p + 4];
+        width = (bytes[p + 5] << 8) | bytes[p + 6];
+        break;
+      }
+      p += length;
+    }
+  }
+  if (width < 1 ||
+      height < 1 ||
+      width > 8192 ||
+      height > 8192 ||
+      width * height > 16000000) {
+    throw StateError('Use a valid JPEG/PNG of at most 16 megapixels.');
+  }
+  return value;
 }
