@@ -46,6 +46,7 @@ android {
                 signingConfig = signingConfigs.getByName("production")
             } else if (System.getenv("FLAIT_TEST_BUILD") == "true") {
                 // Explicit CI/device-test artifacts; never a Play production key.
+                applicationIdSuffix = ".preview"
                 signingConfig = signingConfigs.getByName("debug")
             } else {
                 throw GradleException("Provide FLAIT_KEYSTORE_PATH and passwords for a production release, or explicitly set FLAIT_TEST_BUILD=true for test artifacts.")

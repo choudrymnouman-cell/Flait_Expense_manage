@@ -2,7 +2,7 @@ from pathlib import Path
 manifest=Path('android/app/src/main/AndroidManifest.xml')
 s=manifest.read_text()
 if 'android.permission.INTERNET' not in s:s=s.replace('<application','<uses-permission android:name="android.permission.INTERNET"/>\n    <application',1)
-s=s.replace('android:label="flait_expense_manage"','android:label="Flait"')
+s=s.replace('android:label="flait_expense_manage"','android:label="Expense Manage"')
 manifest.write_text(s)
 p=Path('android/app/build.gradle.kts')
 if p.exists():p.write_text(p.read_text().replace('minSdk = flutter.minSdkVersion','minSdk = 24'))
@@ -30,7 +30,7 @@ for source in Path('android/app/src/main/kotlin').rglob('MainActivity.kt'):
   content=source.read_text()
   if 'class MainActivity' in content and ('FlutterActivity' in content or 'FlutterFragmentActivity' in content): source.unlink()
 activity=Path('android/app/src/main/kotlin/com/flait/expenses/MainActivity.kt');activity.parent.mkdir(parents=True,exist_ok=True)
-activity.write_text('package com.flait.expenses\n\nimport io.flutter.embedding.android.FlutterFragmentActivity\n\nclass MainActivity : FlutterFragmentActivity()\n')
+if not activity.exists(): activity.write_text('package com.flait.expenses\n\nimport io.flutter.embedding.android.FlutterFragmentActivity\n\nclass MainActivity : FlutterFragmentActivity()\n')
 for name in ['values','values-night','values-v31','values-night-v31']:
  styles=Path('android/app/src/main/res')/name/'styles.xml'
  if styles.exists():

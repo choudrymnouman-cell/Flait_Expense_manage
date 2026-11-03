@@ -52,7 +52,7 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused &&
+    if ((state == AppLifecycleState.paused || state == AppLifecycleState.hidden) &&
         widget.state.preferences['pin'] != null) {
       setState(() => unlocked = false);
       widget.onLock(true);
@@ -89,9 +89,9 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
     try {
       final ok = biometric
           ? await LocalAuthentication().authenticate(
-              localizedReason: 'Unlock your Flait records',
+              localizedReason: 'Unlock Expense Manage',
               options: const AuthenticationOptions(
-                  biometricOnly: false, stickyAuth: true))
+                  biometricOnly: true, stickyAuth: true))
           : await PinSecurity.check(
               pin.text, asMap(widget.state.preferences['pin']));
       if (ok) {
@@ -134,7 +134,7 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
                         child:
                             Column(mainAxisSize: MainAxisSize.min, children: [
                           const Icon(Icons.lock_outline, size: 48),
-                          AppText(tr(context, 'Unlock Flait', 'فلیٹ کھولیں'),
+                          AppText(tr(context, 'Unlock Expense Manage', 'فلیٹ کھولیں'),
                               style: Theme.of(context).textTheme.headlineSmall),
                           TextField(
                               controller: pin,
@@ -155,9 +155,7 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
                                     busy ? null : () => unlock(biometric: true),
                                 icon: const Icon(Icons.fingerprint),
                                 label: const AppText(
-                                    'Fingerprint / device passcode')),
-                          const AppText(
-                              'Forgot PIN? Restore your encrypted backup on a fresh installation. There is no server recovery.'),
+                                    'Fingerprint')),
                         ]))))));
   }
 }

@@ -58,7 +58,7 @@ void main() {
     }))!;
     await tester.pumpWidget(OfflineFlaitApp(state: s));
     await tester.pumpAndSettle();
-    expect(find.text('Unlock Flait'), findsOneWidget);
+    expect(find.text('Unlock Expense Manage'), findsOneWidget);
     await tester.enterText(find.byType(TextField), '123456');
     await tester.runAsync(() => tester.tap(find.text('Unlock')));
     for (var i = 0;
@@ -80,7 +80,7 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(find.text('Sensitive pushed page'), findsNothing);
-    expect(find.text('Unlock Flait'), findsOneWidget);
+    expect(find.text('Unlock Expense Manage'), findsOneWidget);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpWidget(const SizedBox());
   });

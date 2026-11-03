@@ -103,6 +103,8 @@ class AutoSync extends ChangeNotifier {
     }
   }
 
+  void refresh() => _changed();
+
   void _changed() {
     if (_closed) return;
     final id = state.identity, view = state.view;
@@ -200,7 +202,7 @@ class _Route {
   }
 
   void changed() {
-    final next = canonical(state.sharedPacket());
+    final next = canonical([state.sharedPacket(), state.directData?.call(peer)]);
     if (next != fingerprint) {
       fingerprint = next;
       tag = randomCode();

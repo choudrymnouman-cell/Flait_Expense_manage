@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'app.dart';
+import 'expense_manage/expense_app.dart';
+import 'expense_manage/monthly_state.dart';
 import 'services/app_preferences.dart';
 import 'screens/lock_gate.dart';
 import 'offline/auto_sync.dart';
@@ -13,7 +15,10 @@ Future<void> main() async {
   try {
     final state = FlaitState(await LocalDatabase.open());
     await state.load();
-    runApp(OfflineFlaitApp(state: state));
+    if (state.loadError != null) throw StateError('Local storage unavailable.');
+    final app = MonthlyState(state)..active = false;
+    await app.load();
+    runApp(ExpenseManageApp(app));
   } catch (_) {
     runApp(const MaterialApp(
         home: Scaffold(
@@ -21,7 +26,7 @@ Future<void> main() async {
                 child: Padding(
                     padding: EdgeInsets.all(24),
                     child: Text(
-                        'Local storage could not be opened. Use a normal browser window with storage enabled, or reopen the app. Existing data has not been reset.'))))));
+                        'Could not open local storage. Reopen Expense Manage.'))))));
   }
 }
 
