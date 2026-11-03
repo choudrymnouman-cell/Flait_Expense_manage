@@ -45,8 +45,6 @@ class ProPreferencesScreen extends StatelessWidget {
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
                               labelText: 'Confirm new PIN')),
-                      const AppText(
-                          'Keep an encrypted backup. A forgotten app PIN cannot be recovered from a server.'),
                       if (error != null) AppText(error!),
                     ]),
                     actions: [

@@ -67,10 +67,13 @@ Future<bool> signedBy(Map<String, dynamic> signed, String id) async {
 
 class BookView {
   BookView(
-      this.owner, this.groupId, this.name, this.currency, String ownerName) {
+      this.owner, this.groupId, this.name, this.currency, String ownerName, {this.kind = 'legacy', this.invitee}) {
     members[owner] =
         FlatMember(id: owner, name: ownerName, role: MemberRole.admin);
   }
+  final String kind;
+  final String? invitee;
+  final monthly = <String, Map<String, dynamic>>{};
   String owner;
   final String groupId, name, currency;
   String? transferOffer, transferTo;
@@ -119,6 +122,141 @@ class BookView {
     return result;
   }
 
+  void applyMonthly(
+    String id,
+    String actor,
+    String action,
+    Map<String, dynamic> data,
+    DateTime at,
+  ) {
+    final period = text(data['month'], 7, 7);
+    if (!RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(period)) {
+      throw StateError('Invalid month.');
+    }
+    final active =
+        members.values.where((m) => m.active).map((m) => m.id).toSet();
+    Map<String, int> split(int amount) =>
+        allocateShares(amount, {for (final member in active) member: 1});
+    Map<String, dynamic> target(String type) {
+      final row = monthly[data['target']];
+      if (row == null || row['type'] != type) {
+        throw StateError('Record not found.');
+      }
+      return row;
+    }
+
+    switch (action) {
+      case 'meal_entry':
+        if (kind != 'meal') throw StateError('Choose a meal group.');
+        final amount = cents(data['cents']);
+        final paid = asMap(data['paid']);
+        if (paid.isEmpty ||
+            paid.keys.any((key) => !active.contains(key)) ||
+            paid.values.any((v) => v is! int || v < 0 || v > amount) ||
+            paid.values.cast<int>().fold(0, (a, b) => a + b) != amount) {
+          throw StateError('Payments must add up to the bill.');
+        }
+        monthly[id] = {
+          'type': 'meal',
+          'month': period,
+          'title': text(data['title'], 1, 100),
+          'cents': amount,
+          'shares': split(amount),
+          'paid': paid,
+          'at': at.toIso8601String(),
+        };
+      case 'flat_budget':
+        if ((kind != 'flat' && kind != 'legacy') || actor != owner) {
+          throw StateError('Only the admin sets the monthly budget.');
+        }
+        final amount = cents(data['cents']);
+        final budgetId = 'budget:$period';
+        final old = monthly[budgetId];
+        if (old != null) {
+          final spent = monthly.values
+              .where(
+                (r) =>
+                    r['type'] == 'item' &&
+                    r['month'] == period &&
+                    r['approved'] == true,
+              )
+              .fold<int>(0, (total, row) => total + (row['cents'] as int));
+          if (amount < spent) {
+            throw StateError('Budget cannot be below approved spending.');
+          }
+        }
+        monthly[budgetId] = {
+          'type': 'budget',
+          'month': period,
+          'cents': amount,
+          'shares': split(amount),
+        };
+      case 'flat_item':
+        if ((kind != 'flat' && kind != 'legacy') ||
+            monthly['budget:$period'] == null) {
+          throw StateError('Set the monthly flat budget first.');
+        }
+        final pay = data['pay'];
+        if (pay != 'admin' && pay != 'individual') {
+          throw StateError('Choose who paid.');
+        }
+        final row = <String, dynamic>{
+          'type': 'item',
+          'month': period,
+          'title': text(data['title'], 1, 100),
+          'cents': cents(data['cents']),
+          'author': actor,
+          'payer': pay == 'admin' ? owner : actor,
+          'pay': pay,
+          'eligible': active.toList(),
+          'votes': [actor],
+          'approved': active.length == 1,
+        };
+        monthly[id] = row;
+      case 'flat_approve':
+        final row = target('item');
+        final votes = (row['votes'] as List).cast<String>();
+        if (row['approved'] == true ||
+            !(row['eligible'] as List).contains(actor) ||
+            votes.contains(actor)) {
+          throw StateError('Approval already recorded or unavailable.');
+        }
+        row['votes'] = [...votes, actor];
+        row['approved'] = votes.length + 1 == (row['eligible'] as List).length;
+      case 'loan_entry':
+        if (kind != 'loan' || actor != owner || monthly.isNotEmpty) {
+          throw StateError('One loan per invitation.');
+        }
+        final due = DateTime.tryParse(data['due'] as String? ?? '');
+        if (due == null ||
+            !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(data['due'] as String)) {
+          throw StateError('Choose a return date.');
+        }
+        if (data['direction'] != 'given' && data['direction'] != 'taken') {
+          throw StateError('Choose a loan direction.');
+        }
+        monthly[id] = {
+          'type': 'loan',
+          'month': period,
+          'cents': cents(data['cents']),
+          'due': data['due'],
+          'creator': actor,
+          'direction': data['direction'],
+          'returned': false,
+        };
+      case 'loan_return':
+        final row = target('loan');
+        final lender = row['direction'] == 'given'
+            ? row['creator']
+            : members.keys.where((key) => key != row['creator']).firstOrNull;
+        if (actor != lender || row['returned'] == true) {
+          throw StateError('The lender confirms the return.');
+        }
+        row['returned'] = true;
+        row['returnMonth'] = period;
+    }
+  }
+
   // Only the owner's signed linear journal changes shared money. Member
   // operations remain proposals until the owner commits them, preventing
   // independent offline treasurers from spending the same balance.
@@ -135,16 +273,37 @@ class BookView {
     final data = asMap(b['data']);
     final at = DateTime.parse(b['at'] as String);
     switch (b['kind']) {
+      case 'meal_entry':
+      case 'flat_budget':
+      case 'flat_item':
+      case 'flat_approve':
+      case 'loan_entry':
+      case 'loan_return':
+        applyMonthly(id, actor, b['kind'] as String, data, at);
       case 'member':
         if (actor != owner) {
           throw StateError('Only the owner can add flatmates.');
         }
         final key = data['id'] as String;
+        if (kind == 'loan' &&
+            (members.length >= 2 || (invitee != null && key != invitee))) {
+          throw StateError('This loan invitation is for one person.');
+        }
         if (base64Decode(key).length != 32 || members.containsKey(key)) {
           throw StateError('Member already exists or key is invalid.');
         }
         members[key] = FlatMember(
-            id: key, name: text(data['name'], 1, 80), role: MemberRole.member);
+          id: key,
+          name: text(data['name'], 1, 80),
+          role: MemberRole.member,
+        );
+        final budget = monthly['budget:${data['budgetMonth']}'];
+        if (budget != null) {
+          budget['shares'] = allocateShares(budget['cents'] as int, {
+            for (final member in members.values)
+              if (member.active) member.id: 1,
+          });
+        }
       case 'role':
         if (actor != owner ||
             data['id'] == owner ||
@@ -437,13 +596,15 @@ class SecureBook {
   Map<String, dynamic> toJson() =>
       {'version': 3, 'manifest': manifest, 'records': records};
   static Future<SecureBook> create(DeviceIdentity identity, String name,
-      {String currency = 'PKR'}) async {
+      {String currency = 'PKR', String kind = 'legacy', String? invitee}) async {
     final m = await identity.sign({
       'id': const Uuid().v4(),
       'owner': identity.publicId,
       'ownerName': identity.name,
       'name': name.trim(),
       'currency': currency,
+      if (kind != 'legacy') 'kind': kind,
+      if (invitee != null) 'invitee': invitee,
       'at': DateTime.now().toUtc().toIso8601String()
     });
     return SecureBook(m, []);
@@ -459,7 +620,9 @@ class SecureBook {
   }
 
   BookView emptyView() => BookView(originOwner, id, details['name'] as String,
-      details['currency'] as String, details['ownerName'] as String);
+      details['currency'] as String, details['ownerName'] as String,
+      kind: details['kind'] as String? ?? 'legacy',
+      invitee: details['invitee'] as String?);
   Future<BookView> verify() async {
     if (records.length > 10000 ||
         !await signedBy(manifest, originOwner) ||
@@ -616,6 +779,13 @@ void validateDraftShape(Map<String, dynamic> draft) {
   }
   DateTime.parse(b['at'] as String);
   switch (b['kind']) {
+    case 'meal_entry':
+    case 'flat_budget':
+    case 'flat_item':
+    case 'flat_approve':
+    case 'loan_entry':
+    case 'loan_return':
+      if (d['month'] is! String) throw const FormatException('Invalid month.');
     case 'expense':
       if (d['title'] is! String ||
           d['description'] is! String ||

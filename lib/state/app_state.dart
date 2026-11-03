@@ -10,6 +10,8 @@ class FlaitState extends ChangeNotifier {
   FlaitState(this.storage);
   final LocalDatabase storage;
   final accounting = const AccountingService();
+  Map<String, dynamic> Function(String peer)? directData;
+  Future<void> Function(String peer, Map<String, dynamic> data)? receiveDirect;
   DeviceIdentity? identity;
   SecureBook? book;
   BookView? view;
@@ -171,14 +173,30 @@ class FlaitState extends ChangeNotifier {
             : DeviceIdentity(identity!.seed, identity!.publicId, name.trim());
         await _save(who, book, proposals);
       });
-  Future<void> createFlat(String name) => serial(() async {
+  Future<void> useIdentity(DeviceIdentity who) => serial(() async {
+        if (book != null || identity != null) {
+          throw StateError('This workspace already has a profile.');
+        }
+        await _save(who, null, []);
+      });
+  Future<void> createFlat(
+    String name, {
+    String kind = 'flat',
+    String? invitee,
+  }) =>
+      serial(() async {
         if (book != null ||
             identity == null ||
             name.trim().length < 2 ||
             name.trim().length > 80) {
           throw ArgumentError('Enter a flat name of 2–80 characters.');
         }
-        await _save(identity, await SecureBook.create(identity!, name), []);
+        await _save(
+          identity,
+          await SecureBook.create(identity!, name,
+              kind: kind, invitee: invitee),
+          [],
+        );
       });
   int _cents(double n) {
     if (!n.isFinite ||
@@ -286,7 +304,12 @@ class FlaitState extends ChangeNotifier {
       });
   Future<void> addMember(String id, String name) async {
     if (view!.members.containsKey(id)) return;
-    await operation('member', {'id': id, 'name': name});
+    final today = DateTime.now();
+    await operation('member', {
+      'id': id,
+      'name': name,
+      'budgetMonth': '${today.year}-${today.month.toString().padLeft(2, '0')}',
+    });
   }
 
   Future<void> setPreference(String key, dynamic value) => serial(() async {

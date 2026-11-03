@@ -1,7 +1,7 @@
 name: flait_expense_manage
-description: Shared flat expense manager for Android and Web.
+description: Monthly personal and shared expense manager.
 publish_to: "none"
-version: 3.0.0+6
+version: 4.0.0+7
 environment:
   sdk: ">=3.3.0 <4.0.0"
 dependencies:

@@ -5,11 +5,14 @@ import 'device_key.dart';
 import 'storage_io.dart' if (dart.library.js_interop) 'storage_web.dart';
 
 class LocalDatabase {
-  LocalDatabase(this.db, {this.encryptionKey});
+  LocalDatabase(this.db, {this.encryptionKey, String recordId = 'device'})
+      : _record = stringMapStoreFactory.store('flait_v2').record(recordId);
+  LocalDatabase scoped(String id) =>
+      LocalDatabase(db, encryptionKey: encryptionKey, recordId: id);
   final Database db;
   final SecretKey? encryptionKey;
   bool get encryptedAtRest => encryptionKey != null;
-  final _record = stringMapStoreFactory.store('flait_v2').record('device');
+  final RecordRef<String, Map<String, Object?>> _record;
   static Future<LocalDatabase> open() async {
     final key = await deviceEncryptionKey();
     final database =

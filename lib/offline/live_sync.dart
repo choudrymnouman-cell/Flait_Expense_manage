@@ -138,9 +138,11 @@ class LiveRelay {
 
 class SyncSession extends ChangeNotifier {
   SyncSession(this.state,
-      {this.host = true, this.connectionCode, this.trustedPeerId});
+      {this.host = true, this.connectionCode, this.trustedPeerId, this.expectedKind, this.acceptGroup});
   final String? connectionCode, trustedPeerId;
   final FlaitState state;
+  final String? expectedKind;
+  final bool Function(String)? acceptGroup;
   final bool host;
   late final LiveRelay relay = LiveRelay(_receive, (text) {
     status = text;
@@ -266,11 +268,21 @@ class SyncSession extends ChangeNotifier {
       }
       final packet = asMap(b['packet']);
       final received = await SecureBook.fromJson(asMap(packet['book']));
+      if (state.book == null && acceptGroup?.call(received.id) == false) {
+        throw StateError('You already joined this group.');
+      }
       final view = await received.verify();
+      if (expectedKind != null && view.kind != expectedKind &&
+          !(expectedKind == 'flat' && view.kind == 'legacy')) {
+        throw StateError('This code belongs to another section.');
+      }
       if (!view.members.containsKey(author)) {
         throw StateError('The sender is not a verified flatmate.');
       }
       await state.receivePacket(packet);
+      if (trustedPeerId == author && packet['direct'] is Map) {
+        await state.receiveDirect?.call(author, asMap(packet['direct']));
+      }
       peerId = author;
       peerSid = b['sid'] as String;
       _helloTimer?.cancel();
@@ -319,6 +331,10 @@ class SyncSession extends ChangeNotifier {
     status = 'Transferring encrypted changes…';
     _notify();
     final packet = state.sharedPacket();
+    if (trustedPeerId != null && peerId == trustedPeerId) {
+      final direct = state.directData?.call(trustedPeerId!);
+      if (direct != null) packet['direct'] = direct;
+    }
     if (stage == 'final') _finalHeads.add(await digest(asMap(packet['book'])));
     await relay.send(await _signed({
       'type': 'snapshot',
