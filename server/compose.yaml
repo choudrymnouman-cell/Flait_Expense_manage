@@ -1,0 +1,36 @@
+name: expense-manage
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: expense_manage
+      POSTGRES_USER: expense_manage
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - expense_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U expense_manage -d expense_manage"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [expense_private]
+
+  api:
+    build: ./api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://expense_manage:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/expense_manage
+    ports:
+      - "127.0.0.1:18081:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [expense_private]
+
+volumes:
+  expense_postgres_data:
+
+networks:
+  expense_private:
+    driver: bridge
